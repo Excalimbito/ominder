@@ -6,14 +6,23 @@
   "author": "Excalimbito",
   "description": "Reminders for Omarchy: flexible times, repeats, snooze, sound, and a management panel",
   "kinds": [
+    "bar-widget",
     "overlay"
   ],
   "keepLoaded": true,
   "entryPoints": {
+    "barWidget": "BarWidget.qml",
     "overlay": "ReminderFlow.qml"
   },
   "omarchy": {
     "clonedFrom": "omarchy.reminders"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "barWidget": {
+    "displayName": "Ominder",
+    "description": "Upcoming reminders and the reminder manager",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
 }

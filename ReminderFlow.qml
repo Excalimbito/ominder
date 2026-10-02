@@ -3,7 +3,6 @@ import Quickshell.Wayland
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "ReminderFlowModel.js" as ReminderFlowModel
 import "TimeParser.js" as TimeParser
 
 Item {
@@ -14,10 +13,9 @@ Item {
   property var manifest: null
 
   property bool opened: false
-  property string step: "minutes"
-  property string minutes: ""
-  property string filterText: ""
+  property string editId: ""
   property string fontFamily: Style.font.menuFamily
+  readonly property string ominder: Qt.resolvedUrl("bin/ominder").toString().replace(/^file:\/\//, "")
 
   property color background: Color.menu.background
   property color foreground: Color.menu.text
@@ -26,10 +24,11 @@ Item {
   property color scrim: Color.menu.scrim
   readonly property int cornerRadius: Style.cornerRadius
   property int contentMargin: Style.spacing.panelPadding
-  property int headerHeight: Math.max(Style.space(34), Style.font.title + Style.spacing.controlPaddingY * 2)
-  property int cardWidth: Math.min(Style.space(300), panel.width - Style.gapsOut * 2)
-  property int cardHeight: Math.min(contentMargin * 2 + headerHeight, panel.height - Style.gapsOut * 2)
-  readonly property string promptText: root.step === "message" ? "Reminder message" : "Remind in minutes"
+  property int cardWidth: Math.min(Style.space(380), panel.width - Style.gapsOut * 2)
+  property int cardHeight: contentMargin * 2 + form.implicitHeight
+
+  readonly property var parsed: TimeParser.parse(whenField.text, clock.date)
+  readonly property bool valid: !parsed.error
 
   // `omarchy-shell shell call <id> parse "<when>"` — bin/ominder resolves times here.
   function parse(when) {
@@ -38,17 +37,18 @@ Item {
     return JSON.stringify(result)
   }
 
+  // Payload: {} to create, {id, when, message} to edit.
   function open(payloadJson) {
     var payload = ({})
     try { payload = JSON.parse(payloadJson || "{}") } catch (e) { payload = ({}) }
     if (payload.fontFamily) root.fontFamily = payload.fontFamily
 
+    root.editId = payload.id || ""
+    whenField.text = payload.when || ""
+    messageField.text = payload.message || ""
     root.opened = true
-    root.step = "minutes"
-    root.minutes = ""
-    root.filterText = ""
 
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { whenField.forceActiveFocus() })
   }
 
   function close() {
@@ -66,38 +66,28 @@ Item {
     else root.open("{}")
   }
 
-  function setFilter(nextFilter) {
-    root.filterText = nextFilter
+  function clearOrDismiss(field) {
+    if (field.text) field.text = ""
+    else root.dismiss()
   }
 
   function submit() {
-    var selection = root.filterText
-
-    if (root.step === "minutes") {
-      var nextMinutes = ReminderFlowModel.validMinutes(selection)
-
-      if (!selection.trim()) {
-        root.dismiss()
-        return
-      }
-
-      if (!nextMinutes) {
-        Quickshell.execDetached([root.omarchyPath + "/bin/omarchy-notification-send", "Invalid reminder", "Enter the number of minutes"])
-        return
-      }
-
-      root.minutes = nextMinutes
-      root.step = "message"
-      root.filterText = ""
-      Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    if (!root.valid) {
+      whenField.forceActiveFocus()
       return
     }
 
-    if (root.step === "message") {
-      var args = [root.omarchyPath + "/bin/omarchy-reminder"].concat(ReminderFlowModel.reminderArgs(root.minutes, selection))
-      root.dismiss()
-      Quickshell.execDetached(args)
-    }
+    var args = root.editId ? [root.ominder, "edit", root.editId] : [root.ominder]
+    args.push(whenField.text.trim())
+    if (messageField.text.trim()) args.push(messageField.text.trim())
+    root.dismiss()
+    Quickshell.execDetached(args)
+  }
+
+  SystemClock {
+    id: clock
+    enabled: root.opened
+    precision: SystemClock.Minutes
   }
 
   PanelWindow {
@@ -132,48 +122,52 @@ Item {
 
       MouseArea { anchors.fill: parent; onClicked: {} }
 
-      Item {
-        id: keyCatcher
-        anchors.fill: parent
-        focus: true
-
-        Keys.priority: Keys.BeforeItem
-        Keys.onPressed: function(event) {
-          if (event.key === Qt.Key_Escape) {
-            if (root.filterText) root.setFilter("")
-            else root.dismiss()
-            event.accepted = true
-          } else if (Util.editsFilter(event, root.filterText)) {
-            root.setFilter(Util.editedFilter(event, root.filterText))
-            event.accepted = true
-          } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.submit()
-            event.accepted = true
-          } else if (event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
-            root.setFilter(root.filterText + event.text)
-            event.accepted = true
-          }
-        }
-      }
-
-      Item {
+      Column {
+        id: form
         anchors.fill: parent
         anchors.topMargin: card.contentTopInset
         anchors.rightMargin: card.contentRightInset
         anchors.bottomMargin: card.contentBottomInset
         anchors.leftMargin: card.contentLeftInset
+        spacing: Style.spacing.md
 
         Text {
+          width: parent.width
           textFormat: Text.PlainText
-          anchors.left: parent.left
-          anchors.right: parent.right
-          anchors.verticalCenter: parent.verticalCenter
-          text: root.filterText || (root.promptText + "...")
-          color: root.foreground
-          opacity: root.filterText ? 1 : 0.58
+          text: whenField.text.trim()
+            ? "→ " + TimeParser.describe(root.parsed, clock.date)
+            : "30 · 1h30m · 14:30 · tomorrow 9:00 · fri 14:00 · every day 8:00"
+          color: whenField.text.trim() && !root.valid ? Color.urgent : root.foreground
+          opacity: whenField.text.trim() ? 1 : 0.58
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          elide: Text.ElideRight
+        }
+
+        TextField {
+          id: whenField
+          width: parent.width
+          placeholderText: "When"
+          foreground: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.heading
-          elide: Text.ElideRight
+          KeyNavigation.tab: messageField
+          KeyNavigation.backtab: messageField
+          Keys.onEscapePressed: root.clearOrDismiss(whenField)
+          onAccepted: if (root.valid) messageField.forceActiveFocus()
+        }
+
+        TextField {
+          id: messageField
+          width: parent.width
+          placeholderText: "Message"
+          foreground: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.heading
+          KeyNavigation.tab: whenField
+          KeyNavigation.backtab: whenField
+          Keys.onEscapePressed: root.clearOrDismiss(messageField)
+          onAccepted: root.submit()
         }
       }
     }

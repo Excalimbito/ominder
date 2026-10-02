@@ -267,6 +267,7 @@ import_omarchy_reminders() {
 # entries without a timer, and timers without an entry.
 sweep() {
   local file id stale=()
+  [[ -f $STATE ]] || echo "[]" | save_state
   import_omarchy_reminders
 
   mapfile -t stale < <(state | jq -r --argjson now "$(date +%s)" '.[] | select(.everySeconds == 0 and .onCalendar == "" and .at < $now - 60) | .id')
@@ -317,6 +318,34 @@ uninstall() {
   remove_reminders "${ids[@]}"
   rm -rf "$STATE_DIR" "$HYPR_STUB"
   echo "Ominder units, state, and keybinding stub removed"
+}
+
+# Rebinds the panel and clear keys to Ominder while the plugin folder exists.
+# Omarchy loads the stub on every Hyprland reload; a changed stub is applied
+# live with hyprctl eval. Super+Ctrl+R needs no stub: it summons
+# omarchy.reminders, which the shell routes to Ominder.
+write_hypr_stub() {
+  local ominder="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/$PLUGIN_ID/bin/ominder" stub
+  stub=$(
+    cat <<EOF
+-- Written by the Ominder plugin ($PLUGIN_ID). Rebinds the reminder keys
+-- while the plugin is installed; Omarchy's defaults return once it is removed.
+local ominder = "$ominder"
+local file = io.open(ominder, "r")
+if file then
+  file:close()
+  hl.unbind("SUPER + CTRL + ALT + R")
+  o.bind("SUPER + CTRL + ALT + R", "Show reminders", "'" .. ominder .. "' panel")
+  hl.unbind("SUPER + SHIFT + CTRL + R")
+  o.bind("SUPER + SHIFT + CTRL + R", "Clear reminders", "'" .. ominder .. "' clear")
+end
+EOF
+  )
+
+  [[ -f $HYPR_STUB && $(<"$HYPR_STUB") == "$stub" ]] && return
+  mkdir -p "$(dirname "$HYPR_STUB")"
+  printf '%s\n' "$stub" >"$HYPR_STUB"
+  hyprctl eval "dofile(\"$HYPR_STUB\")" >/dev/null 2>&1 || true
 }
 
 need_args() {
@@ -405,6 +434,9 @@ parse)
 uninstall)
   lock
   uninstall
+  ;;
+hypr-stub)
+  write_hypr_stub
   ;;
 *)
   lock

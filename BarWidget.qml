@@ -74,7 +74,7 @@ BarWidget {
 
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
-  Component.onCompleted: root.run(["sweep"])
+  Component.onCompleted: root.run(["hypr-stub"])
 
   SystemClock {
     id: clock
@@ -89,6 +89,13 @@ BarWidget {
     onFileChanged: reload()
     onLoaded: root.stateText = text()
     onLoadFailed: root.stateText = "[]"
+  }
+
+  // The sweep also creates reminders.json, which the view cannot watch until it exists.
+  Process {
+    running: true
+    command: [root.ominder, "sweep"]
+    onExited: stateFileView.reload()
   }
 
   Loader {

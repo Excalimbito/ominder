@@ -267,6 +267,7 @@ import_omarchy_reminders() {
 # entries without a timer, and timers without an entry.
 sweep() {
   local file id stale=()
+  [[ -f $STATE ]] || echo "[]" | save_state
   import_omarchy_reminders
 
   mapfile -t stale < <(state | jq -r --argjson now "$(date +%s)" '.[] | select(.everySeconds == 0 and .onCalendar == "" and .at < $now - 60) | .id')

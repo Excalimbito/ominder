@@ -1,0 +1,405 @@
+#!/bin/bash
+
+# Ominder: reminders on systemd user timers. The plugin's QML, the timer units,
+# and the Hyprland stub all call this script by its full path.
+
+set -euo pipefail
+
+PLUGIN_ID="io.github.excalimbito.ominder"
+SELF=$(readlink -f "${BASH_SOURCE[0]}")
+PLUGIN_DIR=$(dirname "$(dirname "$SELF")")
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ominder"
+STATE="$STATE_DIR/reminders.json"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+SHELL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json"
+HYPR_STUB="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/toggles/hypr/ominder.lua"
+GLYPH="󰢌"
+
+usage() {
+  cat <<EOF
+Usage: ominder <when> [message]
+       ominder list [--json]
+       ominder rm <id>
+       ominder edit <id> <when> [message]
+       ominder snooze <id>
+       ominder clear
+       ominder reset [--yes]
+       ominder sweep
+       ominder panel
+       ominder parse [--json] <when>
+       ominder uninstall
+
+<when> examples: 30, 90m, 1h30m, 14:30, "tomorrow 9:00", "fri 14:00",
+  "2026-10-05 9:00", "every 30m", "every day 8:00", "every mon,wed 9:00",
+  "every weekday 9:00", "every 1st 10:00"
+EOF
+}
+
+die() {
+  echo "$1" >&2
+  exit 1
+}
+
+notify() {
+  omarchy-notification-send -g "$GLYPH" "$@" || true
+}
+
+lock() {
+  mkdir -p "$STATE_DIR"
+  exec 9>"$STATE_DIR/.lock"
+  flock 9
+}
+
+# Enabled third-party plugins are the ones with an entry in shell.json.
+plugin_enabled() {
+  jq -e --arg id "$PLUGIN_ID" 'any(.. | objects; .id? == $id)' "$SHELL_CONFIG" >/dev/null 2>&1
+}
+
+# Settings live inline on the plugin's shell.json entry: the bar entry when the
+# widget is placed, otherwise the plugins[] entry.
+setting() {
+  jq -r --arg id "$PLUGIN_ID" --arg key "$1" --arg fallback "$2" '
+    first(.bar.layout[]?[]?, .plugins[]? | objects | select(.id == $id)) // {}
+    | .[$key] | if . == null then $fallback else tostring end
+  ' "$SHELL_CONFIG" 2>/dev/null || echo "$2"
+}
+
+state() {
+  if [[ -s $STATE ]]; then cat "$STATE"; else echo "[]"; fi
+}
+
+save_state() {
+  local tmp
+  mkdir -p "$STATE_DIR"
+  tmp=$(mktemp "$STATE_DIR/.reminders.XXXXXX")
+  cat >"$tmp"
+  mv "$tmp" "$STATE"
+}
+
+entry() {
+  state | jq -c --arg id "$1" 'first(.[] | select(.id == $id)) // empty'
+}
+
+new_id() {
+  local id
+  while id=$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n'); [[ -e $UNIT_DIR/ominder-$id.timer ]]; do :; done
+  echo "$id"
+}
+
+# Prints the TimeParser result for <when> as JSON: {at, repeat, onCalendar, everySeconds, preview} or {error}.
+parse_when() {
+  QT_FORCE_STDERR_LOGGING=1 QT_MESSAGE_PATTERN='%{message}' QT_QPA_PLATFORM=offscreen \
+    qml6 "$PLUGIN_DIR/bin/parse.qml" -- "$1" 2>&1 >/dev/null | grep '^{' | tail -n1
+}
+
+write_units() {
+  local id=$1 parsed=$2 at every calendar schedule
+  IFS=$'\t' read -r at every calendar < <(jq -r '[.at, .everySeconds, .onCalendar] | @tsv' <<<"$parsed")
+
+  if ((every > 0)); then
+    schedule="OnActiveSec=$every"$'\n'"OnUnitActiveSec=$every"
+  elif [[ -n $calendar ]]; then
+    schedule="OnCalendar=$calendar"
+  else
+    schedule="OnCalendar=$(date -d "@$at" '+%Y-%m-%d %H:%M:%S')"
+  fi
+
+  mkdir -p "$UNIT_DIR"
+  cat >"$UNIT_DIR/ominder-$id.timer" <<EOF
+[Unit]
+Description=Ominder reminder $id
+
+[Timer]
+$schedule
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+  # If the plugin is gone, the unit removes itself instead of failing.
+  cat >"$UNIT_DIR/ominder-$id.service" <<EOF
+[Unit]
+Description=Ominder reminder $id
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'if [[ -x \$\$0 ]]; then exec "\$\$0" fire "\$\$1"; fi; systemctl --user disable --now "ominder-\$\$1.timer"; rm -f "\$\$2/ominder-\$\$1.timer" "\$\$2/ominder-\$\$1.service"; systemctl --user daemon-reload' "${SELF//%/%%}" "$id" "${UNIT_DIR//%/%%}"
+EOF
+}
+
+add_reminder() {
+  local id=$1 when=$2 message=$3 parsed=$4
+  state | jq --arg id "$id" --arg when "$when" --arg message "$message" --argjson p "$parsed" '
+    map(select(.id != $id))
+    + [{id: $id, when: $when, message: $message, at: $p.at, repeat: $p.repeat, onCalendar: $p.onCalendar, everySeconds: $p.everySeconds}]
+    | sort_by(.at)
+  ' | save_state
+  write_units "$id" "$parsed"
+  systemctl --user daemon-reload
+  systemctl --user enable --now --quiet "ominder-$id.timer"
+}
+
+remove_reminders() {
+  (($# > 0)) || return 0
+  local id units=()
+  for id in "$@"; do units+=("ominder-$id.timer"); done
+  systemctl --user disable --now --quiet "${units[@]}" 2>/dev/null || true
+  for id in "$@"; do rm -f "$UNIT_DIR/ominder-$id.timer" "$UNIT_DIR/ominder-$id.service"; done
+  state | jq 'map(select(.id | IN($ARGS.positional[]) | not))' --args "$@" | save_state
+  systemctl --user daemon-reload
+}
+
+parse_or_die() {
+  local parsed error
+  parsed=$(parse_when "$1")
+  [[ $parsed == "{"* ]] || die "Could not parse time: $1"
+  error=$(jq -r '.error // empty' <<<"$parsed")
+  [[ -z $error ]] || die "$error: $1"
+  echo "$parsed"
+}
+
+create() {
+  local when=$1 message=${2:-} parsed id
+  parsed=$(parse_or_die "$when")
+  [[ -n $message ]] || message="Reminder"
+  id=$(new_id)
+  add_reminder "$id" "$when" "$message" "$parsed"
+  echo "$id"
+  notify "$message" "$(jq -r .preview <<<"$parsed")"
+}
+
+edit() {
+  local id=$1 when=$2 message=${3:-} old parsed
+  old=$(entry "$id")
+  [[ -n $old ]] || die "No reminder $id"
+  parsed=$(parse_or_die "$when")
+  [[ -n $message ]] || message=$(jq -r .message <<<"$old")
+  systemctl --user disable --now --quiet "ominder-$id.timer" 2>/dev/null || true
+  add_reminder "$id" "$when" "$message" "$parsed"
+  notify "$message" "$(jq -r .preview <<<"$parsed")"
+}
+
+# A one-time copy snoozeMinutes from now. The message argument covers one-time
+# reminders, whose entry is already gone by the time the notification is clicked.
+snooze() {
+  local message
+  message=$(entry "$1" | jq -r '.message // empty')
+  [[ -n $message ]] || message=${2:-Reminder}
+  create "$(setting snoozeMinutes 5)" "$message" >/dev/null
+}
+
+fire() {
+  local id=$1 entry message sound_file
+  entry=$(entry "$id")
+  entry=${entry:-"{}"}
+  message=$(jq -r '.message // "" | if . == "" then "Reminder" else . end' <<<"$entry")
+  notify "Reminder" "$message" --exec "$SELF" snooze "$id" "$message"
+
+  if jq -e '(.everySeconds // 0) == 0 and (.onCalendar // "") == ""' <<<"$entry" >/dev/null; then
+    remove_reminders "$id"
+  fi
+
+  if [[ $(setting sound true) == true ]]; then
+    sound_file=$(setting soundFile /usr/share/sounds/freedesktop/stereo/complete.oga)
+    [[ -f $sound_file ]] && pw-play "$sound_file" >/dev/null 2>&1 || true
+  fi
+}
+
+# Upcoming reminders, sorted, with repeating ones moved to systemd's next elapse.
+list_json() {
+  local timers
+  timers=$(systemctl --user list-timers --all --output=json 'ominder-*.timer' 2>/dev/null) || true
+  state | jq -c --argjson timers "${timers:-[]}" '
+    ($timers | map({key: (.unit | ltrimstr("ominder-") | rtrimstr(".timer")), value: ((.next // 0) / 1000000 | floor)}) | from_entries) as $next
+    | map(if (.everySeconds > 0 or .onCalendar != "") and ($next[.id] // 0) > 0 then .at = $next[.id] else . end)
+    | sort_by(.at)
+  '
+}
+
+list_text() {
+  local id at message repeat
+  list_json | jq -r '.[] | [.id, .at, .message, .repeat] | @tsv' | while IFS=$'\t' read -r id at message repeat; do
+    printf '%s  %s  %s%s\n' "$id" "$(date -d "@$at" '+%a %d %b %H:%M')" "$message" "${repeat:+  ($repeat)}"
+  done
+}
+
+show_reminders() {
+  local body
+  body=$(list_text | cut -d' ' -f3-)
+  notify "Upcoming reminders" "${body:-No upcoming reminders}"
+}
+
+# Moves active omarchy-reminder transient timers over to Ominder units.
+import_omarchy_reminders() {
+  local unit next minutes message message_file now imported=0
+  now=$(date +%s)
+
+  while IFS=$'\t' read -r unit next; do
+    next=$((next / 1000000))
+    ((next > now)) || continue
+    unit=${unit%.timer}
+    minutes=${unit#omarchy-reminder-}
+    minutes=${minutes%%m-*}
+    message="Your $minutes minutes are up"
+    message_file="${XDG_RUNTIME_DIR:-/tmp}/omarchy-reminders/$unit.message"
+    [[ -s $message_file ]] && message=$(<"$message_file")
+
+    systemctl --user stop "$unit.timer" || continue
+    rm -f "$message_file"
+    add_reminder "$(new_id)" "$(date -d "@$next" '+%Y-%m-%d %H:%M')" "$message" \
+      "{\"at\":$next,\"repeat\":\"\",\"onCalendar\":\"\",\"everySeconds\":0}"
+    imported=1
+  done < <(systemctl --user list-timers --all --output=json 'omarchy-reminder-*.timer' 2>/dev/null | jq -r '.[]? | select(.next != null) | [.unit, .next] | @tsv')
+
+  if ((imported)); then omarchy-shell -q omarchy.indicators refresh || true; fi
+}
+
+# Imports omarchy-reminder timers, then drops past-due one-time entries,
+# entries without a timer, and timers without an entry.
+sweep() {
+  local file id stale=()
+  import_omarchy_reminders
+
+  mapfile -t stale < <(state | jq -r --argjson now "$(date +%s)" '.[] | select(.everySeconds == 0 and .onCalendar == "" and .at < $now - 60) | .id')
+
+  for id in $(state | jq -r '.[].id'); do
+    [[ -f $UNIT_DIR/ominder-$id.timer ]] || stale+=("$id")
+  done
+
+  for file in "$UNIT_DIR"/ominder-*.timer; do
+    [[ -e $file ]] || continue
+    id=${file##*/ominder-}
+    id=${id%.timer}
+    [[ -n $(entry "$id") ]] || stale+=("$id")
+  done
+
+  remove_reminders "${stale[@]}"
+}
+
+clear_reminders() {
+  local ids=()
+  mapfile -t ids < <(state | jq -r '.[] | select(.everySeconds == 0 and .onCalendar == "") | .id')
+  remove_reminders "${ids[@]}"
+  notify "One-time reminders cleared"
+}
+
+reset_reminders() {
+  local ids=() answer
+  mapfile -t ids < <(state | jq -r '.[].id')
+
+  if [[ ${1:-} != "--yes" ]]; then
+    [[ -t 0 ]] || die "ominder reset deletes every reminder, including repeating ones. Pass --yes to confirm."
+    read -rp "Delete all ${#ids[@]} reminders, including repeating ones? [y/N] " answer
+    [[ $answer == [yY]* ]] || exit 1
+  fi
+
+  remove_reminders "${ids[@]}"
+  notify "All reminders deleted"
+}
+
+uninstall() {
+  local file ids=()
+  mapfile -t ids < <(state | jq -r '.[].id')
+  for file in "$UNIT_DIR"/ominder-*.timer; do
+    [[ -e $file ]] || continue
+    file=${file##*/ominder-}
+    ids+=("${file%.timer}")
+  done
+  remove_reminders "${ids[@]}"
+  rm -rf "$STATE_DIR" "$HYPR_STUB"
+  echo "Ominder units, state, and keybinding stub removed"
+}
+
+need_args() {
+  (($1 >= $2)) || {
+    usage >&2
+    exit 1
+  }
+}
+
+# With the plugin disabled, the legacy calls behind Omarchy's default
+# keybindings go to omarchy-reminder.
+case ${1:-} in
+panel | show | clear | -i | --interactive)
+  if ! plugin_enabled; then
+    [[ $1 == "panel" ]] && set -- show
+    exec omarchy-reminder "$@"
+  fi
+  ;;
+esac
+
+case ${1:-} in
+"" | -h | --help | help)
+  usage
+  ;;
+-i | --interactive)
+  omarchy-shell shell summon "$PLUGIN_ID" "{}"
+  ;;
+list | show)
+  lock
+  sweep
+  if [[ ${2:-} == "--json" || ${2:-} == "-j" ]]; then
+    list_json
+  elif [[ $1 == "show" ]]; then
+    show_reminders
+  else
+    list_text
+  fi
+  ;;
+rm)
+  need_args $# 2
+  lock
+  [[ -n $(entry "$2") || -e $UNIT_DIR/ominder-$2.timer ]] || die "No reminder $2"
+  remove_reminders "$2"
+  ;;
+edit)
+  need_args $# 3
+  lock
+  edit "$2" "$3" "${*:4}"
+  ;;
+snooze)
+  need_args $# 2
+  lock
+  snooze "$2" "${*:3}"
+  ;;
+fire)
+  need_args $# 2
+  lock
+  fire "$2"
+  ;;
+clear)
+  lock
+  clear_reminders
+  ;;
+reset)
+  lock
+  reset_reminders "${2:-}"
+  ;;
+sweep)
+  lock
+  sweep
+  ;;
+panel)
+  lock
+  sweep
+  omarchy-shell "$PLUGIN_ID" open >/dev/null 2>&1 || show_reminders
+  ;;
+parse)
+  if [[ ${2:-} == "--json" ]]; then
+    need_args $# 3
+    parse_when "$3"
+  else
+    need_args $# 2
+    parse_or_die "$2" | jq -r .preview
+  fi
+  ;;
+uninstall)
+  lock
+  uninstall
+  ;;
+*)
+  lock
+  create "$1" "${*:2}"
+  ;;
+esac

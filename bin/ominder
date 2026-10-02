@@ -104,12 +104,12 @@ write_units() {
   local id=$1 parsed=$2 at every calendar schedule
   IFS=$'\t' read -r at every calendar < <(jq -r '[.at, .everySeconds, .onCalendar] | @tsv' <<<"$parsed")
 
-  if ((every > 0)); then
-    schedule="OnActiveSec=$every"$'\n'"OnUnitActiveSec=$every"
-  elif [[ -n $calendar ]]; then
+  # Intervals start from an absolute time: daemon-reload re-bases OnActiveSec=.
+  if [[ -n $calendar ]]; then
     schedule="OnCalendar=$calendar"
   else
     schedule="OnCalendar=$(date -d "@$at" '+%Y-%m-%d %H:%M:%S')"
+    ((every > 0)) && schedule+=$'\n'"OnUnitActiveSec=$every"
   fi
 
   mkdir -p "$UNIT_DIR"

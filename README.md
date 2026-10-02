@@ -4,6 +4,8 @@ Reminders for [Omarchy](https://omarchy.org): flexible times, repeats, snooze, n
 
 > **Status:** early development. The plugin currently ships simple functionality and UI. See [`docs/SPEC.md`](docs/SPEC.md) for the planned behaviour so far.
 
+![Preview](./preview.png)
+
 ## Install
 
 ```bash

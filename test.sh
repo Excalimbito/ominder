@@ -53,7 +53,7 @@ check "confirmation notification" 'grep -q "omarchy-notification-send .* pay the
 daily=$("$OMINDER" "every day 8:00" stretch)
 check "daily OnCalendar" 'grep -qx "OnCalendar=\*-\*-\* 08:00:00" "$UNITS/ominder-$daily.timer"'
 interval=$("$OMINDER" "every 30m")
-check "interval timer" 'grep -qx "OnUnitActiveSec=1800" "$UNITS/ominder-$interval.timer" && grep -qx "OnActiveSec=1800" "$UNITS/ominder-$interval.timer"'
+check "interval timer starts at an absolute time" 'grep -qx "OnUnitActiveSec=1800" "$UNITS/ominder-$interval.timer" && grep -qE "^OnCalendar=[0-9]{4}-" "$UNITS/ominder-$interval.timer"'
 check "empty message defaults to Reminder" '[[ $(jq -r --arg id "$interval" ".[] | select(.id == \$id) | .message" "$STATE") == Reminder ]]'
 
 check "invalid time is rejected" '! "$OMINDER" nonsense 2>/dev/null && [[ $(count) == 3 ]]'

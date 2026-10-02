@@ -4,6 +4,8 @@ Reminders for [Omarchy](https://omarchy.org): flexible times, repeats, snooze, n
 
 > **Status:** early development. The plugin currently ships simple functionality and UI. See [`docs/SPEC.md`](docs/SPEC.md) for the planned behaviour so far.
 
+![Preview](./preview.png)
+
 ## Install
 
 ```bash
@@ -11,6 +13,19 @@ omarchy plugin add https://github.com/Excalimbito/ominder.git --enable
 ```
 
 Enabling Ominder puts a bell with the number of upcoming reminders in the bar and takes over Omarchy's reminder overlay. Reminders created with `omarchy-reminder` are moved over to Ominder automatically.
+
+### Dependencies
+
+Ominder installs nothing. It uses tools that ship with Omarchy: a systemd user session, `jq`, `flock`, `qml6`, `pw-play`, `hyprctl`, and Omarchy's `omarchy-shell` and `omarchy-notification-send`.
+
+### What it changes outside the plugin folder
+
+- Creates `ominder-<id>.timer` / `.service` units in `~/.config/systemd/user` and starts or stops them with `systemctl --user`.
+- Stores reminders in `~/.local/state/ominder/`.
+- Writes `~/.local/state/omarchy/toggles/hypr/ominder.lua` to rebind `Super+Ctrl+Alt+R` and `Super+Shift+Ctrl+R`. The file has no effect once the plugin folder is gone.
+- Stops active `omarchy-reminder` timers and recreates them as Ominder reminders.
+
+`ominder uninstall` removes all of the above.
 
 ## Usage
 

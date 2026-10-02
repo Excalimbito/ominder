@@ -2,6 +2,8 @@
 
 Reminders for [Omarchy](https://omarchy.org): flexible times, repeats, snooze, notification sound, and a panel to manage everything. Ominder replaces Omarchy's built-in reminder overlay and keeps its look, keybindings, and keyboard-first flow.
 
+> **Status:** early development. The plugin currently ships simple functionality and UI. See [`docs/SPEC.md`](docs/SPEC.md) for the planned behaviour so far.
+
 ## Install
 
 ```bash

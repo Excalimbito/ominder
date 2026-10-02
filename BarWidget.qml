@@ -74,7 +74,10 @@ BarWidget {
 
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
-  Component.onCompleted: root.run(["sweep"])
+  Component.onCompleted: {
+    root.run(["sweep"])
+    root.run(["hypr-stub"])
+  }
 
   SystemClock {
     id: clock

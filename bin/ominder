@@ -319,6 +319,34 @@ uninstall() {
   echo "Ominder units, state, and keybinding stub removed"
 }
 
+# Rebinds the panel and clear keys to Ominder while the plugin folder exists.
+# Omarchy loads the stub on every Hyprland reload; a changed stub is applied
+# live with hyprctl eval. Super+Ctrl+R needs no stub: it summons
+# omarchy.reminders, which the shell routes to Ominder.
+write_hypr_stub() {
+  local ominder="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/$PLUGIN_ID/bin/ominder" stub
+  stub=$(
+    cat <<EOF
+-- Written by the Ominder plugin ($PLUGIN_ID). Rebinds the reminder keys
+-- while the plugin is installed; Omarchy's defaults return once it is removed.
+local ominder = "$ominder"
+local file = io.open(ominder, "r")
+if file then
+  file:close()
+  hl.unbind("SUPER + CTRL + ALT + R")
+  o.bind("SUPER + CTRL + ALT + R", "Show reminders", "'" .. ominder .. "' panel")
+  hl.unbind("SUPER + SHIFT + CTRL + R")
+  o.bind("SUPER + SHIFT + CTRL + R", "Clear reminders", "'" .. ominder .. "' clear")
+end
+EOF
+  )
+
+  [[ -f $HYPR_STUB && $(<"$HYPR_STUB") == "$stub" ]] && return
+  mkdir -p "$(dirname "$HYPR_STUB")"
+  printf '%s\n' "$stub" >"$HYPR_STUB"
+  hyprctl eval "dofile(\"$HYPR_STUB\")" >/dev/null 2>&1 || true
+}
+
 need_args() {
   (($1 >= $2)) || {
     usage >&2
@@ -405,6 +433,9 @@ parse)
 uninstall)
   lock
   uninstall
+  ;;
+hypr-stub)
+  write_hypr_stub
   ;;
 *)
   lock

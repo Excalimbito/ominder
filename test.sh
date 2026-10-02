@@ -18,7 +18,7 @@ UNITS="$XDG_CONFIG_HOME/systemd/user"
 mkdir -p "$TMP/bin" "$XDG_CONFIG_HOME/omarchy" "$XDG_RUNTIME_DIR/omarchy-reminders"
 echo '[]' >"$TIMERS"
 
-for stub in omarchy-notification-send omarchy-shell omarchy-reminder pw-play; do
+for stub in omarchy-notification-send omarchy-shell omarchy-reminder pw-play hyprctl; do
   printf '#!/bin/bash\necho "%s $*" >>"$LOG"\n[[ $0 != *omarchy-shell ]]\n' "$stub" >"$TMP/bin/$stub"
 done
 cat >"$TMP/bin/systemctl" <<'EOF'
@@ -131,8 +131,16 @@ echo '{"version":1,"plugins":[]}' >"$XDG_CONFIG_HOME/omarchy/shell.json"
 "$OMINDER" panel
 check "disabled plugin passes clear and panel to omarchy-reminder" 'grep -qx "omarchy-reminder clear" "$LOG" && grep -qx "omarchy-reminder show" "$LOG" && [[ $(count) == 1 ]]'
 
+# Hyprland stub
+STUB="$XDG_STATE_HOME/omarchy/toggles/hypr/ominder.lua"
+: >"$LOG"
+"$OMINDER" hypr-stub
+check "hypr-stub writes the stub and applies it live" '[[ $(grep -c "^hyprctl eval" "$LOG") == 1 ]] && grep -qF "o.bind(\"SUPER + SHIFT + CTRL + R\"" "$STUB" && ! grep -q reload "$LOG"'
+"$OMINDER" hypr-stub
+check "unchanged stub is not re-applied" '[[ $(grep -c "^hyprctl eval" "$LOG") == 1 ]]'
+check "stub only binds while the plugin exists" 'grep -qF "local ominder = \"$XDG_CONFIG_HOME/omarchy/plugins/io.github.excalimbito.ominder/bin/ominder\"" "$STUB" && grep -q "^if file then" "$STUB"'
+
 # uninstall
-mkdir -p "$XDG_STATE_HOME/omarchy/toggles/hypr" && touch "$XDG_STATE_HOME/omarchy/toggles/hypr/ominder.lua"
 "$OMINDER" uninstall >/dev/null
 check "uninstall removes units, state, and stub" '[[ ! -e $XDG_STATE_HOME/ominder && -z $(ls "$UNITS"/ominder-* 2>/dev/null) && ! -e $XDG_STATE_HOME/omarchy/toggles/hypr/ominder.lua ]]'
 

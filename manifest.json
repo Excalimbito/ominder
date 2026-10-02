@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.excalimbito.ominder",
+  "name": "Ominder",
+  "version": "0.1.0",
+  "author": "Excalimbito",
+  "description": "Reminders for Omarchy: flexible times, repeats, snooze, sound, and a management panel",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "ReminderFlow.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.reminders"
+  },
+  "license": "MIT"
+}

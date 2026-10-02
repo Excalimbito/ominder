@@ -4,6 +4,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "ReminderFlowModel.js" as ReminderFlowModel
+import "TimeParser.js" as TimeParser
 
 Item {
   id: root
@@ -29,6 +30,13 @@ Item {
   property int cardWidth: Math.min(Style.space(300), panel.width - Style.gapsOut * 2)
   property int cardHeight: Math.min(contentMargin * 2 + headerHeight, panel.height - Style.gapsOut * 2)
   readonly property string promptText: root.step === "message" ? "Reminder message" : "Remind in minutes"
+
+  // `omarchy-shell shell call <id> parse "<when>"` — bin/ominder resolves times here.
+  function parse(when) {
+    var result = TimeParser.parse(when)
+    result.preview = TimeParser.describe(result)
+    return JSON.stringify(result)
+  }
 
   function open(payloadJson) {
     var payload = ({})

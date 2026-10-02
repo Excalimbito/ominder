@@ -87,7 +87,15 @@ new_id() {
 }
 
 # Prints the TimeParser result for <when> as JSON: {at, repeat, onCalendar, everySeconds, preview} or {error}.
+# Asks the running shell first; without one (TTY, SSH) evaluates TimeParser.js through qml6.
 parse_when() {
+  local result
+  result=$(omarchy-shell shell call "$PLUGIN_ID" parse "$1" 2>/dev/null) || true
+  if [[ $result == "{"* ]]; then
+    echo "$result"
+    return
+  fi
+
   QT_FORCE_STDERR_LOGGING=1 QT_MESSAGE_PATTERN='%{message}' QT_QPA_PLATFORM=offscreen \
     qml6 "$PLUGIN_DIR/bin/parse.qml" -- "$1" 2>&1 >/dev/null | grep '^{' | tail -n1
 }

@@ -60,6 +60,15 @@ check "invalid time is rejected" '! "$OMINDER" nonsense 2>/dev/null && [[ $(coun
 check "parse prints a preview" '[[ $("$OMINDER" parse "every day 8:00") == *"· daily" ]]'
 check "parse --json" '[[ $("$OMINDER" parse --json 90m | jq .at) -gt $(date +%s) ]]'
 
+cp "$TMP/bin/omarchy-shell" "$TMP/omarchy-shell"
+cat >"$TMP/bin/omarchy-shell" <<'EOF'
+#!/bin/bash
+echo "omarchy-shell $*" >>"$LOG"
+echo '{"at":1,"repeat":"","onCalendar":"","everySeconds":0,"preview":"from shell"}'
+EOF
+check "parse asks the running shell first" '[[ $("$OMINDER" parse 30) == "from shell" ]] && grep -q "omarchy-shell shell call io.github.excalimbito.ominder parse 30" "$LOG"'
+mv "$TMP/omarchy-shell" "$TMP/bin/omarchy-shell"
+
 # list
 check "list shows every reminder" '[[ $("$OMINDER" list | wc -l) == 3 ]]'
 check "list --json" '[[ $("$OMINDER" list --json | jq length) == 3 ]]'

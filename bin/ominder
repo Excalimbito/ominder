@@ -320,7 +320,8 @@ uninstall() {
   echo "Ominder units, state, and keybinding stub removed"
 }
 
-# Rebinds the panel and clear keys to Ominder while the plugin folder exists.
+# Rebinds the panel and clear keys to Ominder while the plugin folder exists, and
+# floats the sound file chooser.
 # Omarchy loads the stub on every Hyprland reload; a changed stub is applied
 # live with hyprctl eval. Super+Ctrl+R needs no stub: it summons
 # omarchy.reminders, which the shell routes to Ominder.
@@ -338,6 +339,7 @@ if file then
   o.bind("SUPER + CTRL + ALT + R", "Show reminders", "'" .. ominder .. "' panel")
   hl.unbind("SUPER + SHIFT + CTRL + R")
   o.bind("SUPER + SHIFT + CTRL + R", "Clear reminders", "'" .. ominder .. "' clear")
+  o.window({ class = "^qml6$", title = "^Choose a reminder sound$" }, { float = true, center = true, size = { 900, 600 } })
 end
 EOF
   )

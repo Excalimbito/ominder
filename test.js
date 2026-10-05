@@ -73,5 +73,42 @@ if (described !== "Tue 20 Oct 09:00 · in 18d20h41m") {
   console.log("FAIL describe far:", described)
 }
 
-console.log(failures ? failures + " failed" : cases.length + 2 + " passed")
+described = TimeParser.describe(TimeParser.parse("every day 14:30", now), now, true)
+if (described !== "Thu · in 2h11m · daily") {
+  failures++
+  console.log("FAIL describe without time:", described)
+}
+
+// [text, minutes, expected]; null means the time cannot be scrolled
+var shifts = [
+  ["", 1, "12:20"],
+  ["", -1, "12:18"],
+  ["14:30", 1, "14:31"],
+  ["9:59", 1, "10:00"],
+  ["23:30", 60, "00:30"],
+  ["0:00", -1, "23:59"],
+  ["Tomorrow 9:00", -60, "Tomorrow 08:00"],
+  ["fri 14:00", 5, "fri 14:05"],
+  ["every mon,wed 9:00", 1, "every mon,wed 09:01"],
+  ["every 1st 10:00", -1, "every 1st 09:59"],
+  ["2026-10-01 12:20", -60, "2026-10-01 11:20"],
+  ["2026-10-01 11:20", 60, "2026-10-01 12:20"],
+  ["30", 1, "31m"],
+  ["1h30m", -31, "59m"],
+  ["1H 30m", 30, "2h"],
+  ["2m", -5, "1m"],
+  ["every 30m", 1, null],
+  ["abc", 1, null],
+  ["abc 9:00", 1, null]
+]
+
+shifts.forEach(function(c) {
+  var actual = TimeParser.shift(c[0], c[1], now)
+  if (actual !== c[2]) {
+    failures++
+    console.log("FAIL shift", JSON.stringify(c[0]), c[1], "expected", JSON.stringify(c[2]), "got", JSON.stringify(actual))
+  }
+})
+
+console.log(failures ? failures + " failed" : cases.length + shifts.length + 3 + " passed")
 process.exit(failures ? 1 : 0)

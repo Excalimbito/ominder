@@ -129,15 +129,43 @@ function parse(text, now) {
   return every ? parseRepeat(every[1], now) : parseOnce(input, now)
 }
 
-// "Thu 14:30 · in 2h10m · daily"
-function describe(result, now) {
+// Moves the time in `text` by `minutes` and returns the new text, or null when
+// it cannot move: interval repeats and unrecognized input. A trailing clock time
+// is replaced in place (wrapping at midnight, prefix kept), a duration stays a
+// duration (at least 1m), and empty text becomes the clock time `now` + minutes.
+function shift(text, minutes, now) {
+  now = now || new Date()
+  var input = String(text || "").trim()
+  if (!input) {
+    var from = new Date(now.getTime() + minutes * 60000)
+    return pad(from.getHours()) + ":" + pad(from.getMinutes())
+  }
+
+  var result = parse(input, now)
+  if (result.everySeconds) return null
+
+  var clock = /(\d{1,2}):(\d{2})$/.exec(input)
+  // A date scrolled into the past still moves, so it can be scrolled back
+  if (clock && (!result.error || result.error === "That time has passed")) {
+    var total = ((Number(clock[1]) * 60 + Number(clock[2]) + minutes) % 1440 + 1440) % 1440
+    return input.slice(0, clock.index) + pad(Math.floor(total / 60)) + ":" + pad(total % 60)
+  }
+
+  var seconds = result.error ? 0 : durationSeconds(input.toLowerCase())
+  if (!seconds) return null
+  var length = Math.max(1, Math.round(seconds / 60) + minutes)
+  return (length >= 60 ? Math.floor(length / 60) + "h" : "") + (length % 60 ? length % 60 + "m" : "")
+}
+
+// "Thu 14:30 · in 2h10m · daily"; without the clock time when the caller shows it
+function describe(result, now, withoutTime) {
   if (result.error) return result.error
 
   now = now || new Date()
   var date = new Date(result.at * 1000)
   var seconds = result.at - now.getTime() / 1000
   var day = DAY_ABBR[date.getDay()] + (seconds >= 6 * 86400 ? " " + date.getDate() + " " + MONTH_ABBR[date.getMonth()] : "")
-  var parts = [day + " " + pad(date.getHours()) + ":" + pad(date.getMinutes()), "in " + formatDuration(seconds)]
+  var parts = [day + (withoutTime ? "" : " " + pad(date.getHours()) + ":" + pad(date.getMinutes())), "in " + formatDuration(seconds)]
   if (result.repeat) parts.push(result.repeat)
   return parts.join(" · ")
 }
@@ -146,6 +174,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     parse: parse,
     describe: describe,
+    shift: shift,
     formatDuration: formatDuration
   }
 }

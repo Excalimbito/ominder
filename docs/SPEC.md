@@ -42,7 +42,7 @@ Timers do **not** use `Persistent=true`. A reminder whose time passed while the 
 | Key | Default |
 |---|---|
 | `sound` | `true` |
-| `soundFile` | `/usr/share/sounds/freedesktop/stereo/complete.oga` |
+| `soundFile` | `/usr/share/sounds/freedesktop/stereo/window-attention.oga` |
 | `snoozeMinutes` | `5` (choices: 5 / 10 / 15 / 30) |
 | `style` | `floating` (choices: `floating` / `classic`). Create overlay style |
 | `blur` | `0.67` (0 to 1). Floating style: strength of the blur behind the overlay. `0` turns it off |
@@ -149,7 +149,7 @@ Opened from the bar widget or `ominder panel`. It always opens on the list view.
 
 Below the header, upcoming reminders show time, message, and a repeat icon, each with edit and delete. The list scrolls once it passes about six rows, and the cursor row is kept in view.
 
-**Settings view.** The header reads *Settings*, with an X that returns to the list. Controls: sound on/off, sound file, default snooze length, style, and, for the floating style, blur and dim sliders and performance mode. Settings are mouse-only.
+**Settings view.** The header reads *Settings*, with a reset button that returns every setting to its default and an X that returns to the list. The sound file field has a folder button that opens a file chooser (Qt's `FileDialog`, native under the GTK platform theme). Controls: sound on/off, sound file, default snooze length, style, and, for the floating style, blur and dim sliders and performance mode. Settings are mouse-only.
 
 **Keys:** `j`/`k` move the cursor, Enter edits, `x` deletes, `n` creates. `s` or `l` opens settings. `h` or Escape returns to the list, and Escape on the list closes the panel. Tab switches between bar panels.
 

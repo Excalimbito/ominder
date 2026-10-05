@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import Quickshell
 import qs.Commons
 import qs.Ui
@@ -24,6 +25,7 @@ Panel {
 
   readonly property string ominder: Qt.resolvedUrl("bin/ominder").toString().replace(/^file:\/\//, "")
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property string defaultSoundFile: "/usr/share/sounds/freedesktop/stereo/window-attention.oga"
 
   function open() {
     root.confirmReset = false
@@ -62,13 +64,23 @@ Panel {
     if (entry) root.run(["rm", entry.id])
   }
 
+  function writeSettings(entry) {
+    root.settings = entry
+    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
+      root.bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
   function saveSetting(key, value) {
     var entry = { id: root.moduleName }
     for (var k in root.settings) if (k !== "id") entry[k] = root.settings[k]
     entry[key] = value
-    root.settings = entry
-    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
-      root.bar.shell.updateEntryInline(root.moduleName, entry)
+    root.writeSettings(entry)
+  }
+
+  // Drops every setting from the entry, so each one falls back to its default.
+  function resetSettings() {
+    root.writeSettings({ id: root.moduleName })
+    soundFileField.text = root.defaultSoundFile
   }
 
   // Scrolls the list just enough to show the cursor row.
@@ -171,14 +183,25 @@ Panel {
             }
           }
 
-          PanelActionButton {
+          Row {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             visible: root.showSettings
-            iconText: "󰅖"
-            tooltipText: "Back to reminders (Esc)"
-            foreground: root.barForeground
-            onClicked: root.showSettings = false
+            spacing: Style.spacing.xs
+
+            PanelActionButton {
+              iconText: "󰑓"
+              tooltipText: "Reset settings to defaults"
+              foreground: root.barForeground
+              onClicked: root.resetSettings()
+            }
+
+            PanelActionButton {
+              iconText: "󰅖"
+              tooltipText: "Back to reminders (Esc)"
+              foreground: root.barForeground
+              onClicked: root.showSettings = false
+            }
           }
 
           Row {
@@ -330,16 +353,31 @@ Panel {
             onClicked: root.saveSetting("sound", !checked)
           }
 
-          TextField {
-            id: soundFileField
-            width: settingsColumn.width
+          Row {
             visible: root.setting("sound", true)
-            text: root.setting("soundFile", "/usr/share/sounds/freedesktop/stereo/complete.oga")
-            placeholderText: "Sound file"
-            foreground: root.barForeground
-            font.family: root.fontFamily
-            Keys.onEscapePressed: keyCatcher.forceActiveFocus()
-            onEditingFinished: if (text !== root.setting("soundFile", "")) root.saveSetting("soundFile", text)
+            width: settingsColumn.width
+            spacing: Style.spacing.sm
+
+            TextField {
+              id: soundFileField
+              anchors.verticalCenter: parent.verticalCenter
+              width: parent.width - browseButton.width - parent.spacing
+              text: root.setting("soundFile", root.defaultSoundFile)
+              placeholderText: "Sound file"
+              foreground: root.barForeground
+              font.family: root.fontFamily
+              Keys.onEscapePressed: keyCatcher.forceActiveFocus()
+              onEditingFinished: if (text !== root.setting("soundFile", "")) root.saveSetting("soundFile", text)
+            }
+
+            PanelActionButton {
+              id: browseButton
+              anchors.verticalCenter: parent.verticalCenter
+              iconText: "󰉋"
+              tooltipText: "Choose a sound file"
+              foreground: root.barForeground
+              onClicked: soundDialog.open()
+            }
           }
 
           Row {
@@ -418,6 +456,18 @@ Panel {
           }
         }
       }
+    }
+  }
+
+  FileDialog {
+    id: soundDialog
+    title: "Choose a reminder sound"
+    nameFilters: ["Sounds (*.oga *.ogg *.wav *.flac *.mp3)", "All files (*)"]
+    currentFolder: "file://" + soundFileField.text.replace(/\/[^\/]*$/, "")
+    onAccepted: {
+      var path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""))
+      soundFileField.text = path
+      root.saveSetting("soundFile", path)
     }
   }
 

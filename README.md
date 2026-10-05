@@ -39,7 +39,7 @@ The create overlay has two fields. Type a time in *when* and press Enter, type t
 
 Above the fields, a large clock shows when the reminder fires, with the day, countdown, and repeat underneath. To adjust the time, scroll over the hours or minutes, or press Up/Down in either field (one minute; with Shift, one hour). Scrolling keeps the form of what you typed: `fri 14:30` becomes `fri 14:31`, and `30` becomes `31m`. Interval repeats such as `every 30m` cannot be scrolled. The **Classic** style setting brings back the compact card with a one-line preview.
 
-Clicking the bell opens the panel, which lists upcoming reminders with edit and delete. The header holds **Clear** (one-time reminders), **Reset** (everything, after confirmation), **New**, and the settings cog. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates. `s` or `l` opens settings, and `h` or Escape returns to the list.
+Clicking the bell opens the panel, which lists upcoming reminders with edit and delete. The header holds **Clear** (one-time reminders), **Reset** (everything, after confirmation), **New**, and the settings cog. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates. `s` or `l` opens settings, and `h` or Escape returns to the list. In settings, the folder button next to the sound file opens a file chooser, and the reset button in the header returns every setting to its default.
 
 Left-clicking a reminder notification snoozes it. Right-clicking dismisses it.
 
@@ -90,7 +90,7 @@ Settings live on the Ominder entry in `~/.config/omarchy/shell.json` and can be 
 | Key | Default | |
 |---|---|---|
 | `sound` | `true` | Play a sound when a reminder fires |
-| `soundFile` | `/usr/share/sounds/freedesktop/stereo/complete.oga` | Played with `pw-play` |
+| `soundFile` | `/usr/share/sounds/freedesktop/stereo/window-attention.oga` | Played with `pw-play` |
 | `snoozeMinutes` | `5` | Snooze length |
 | `style` | `floating` | Create overlay style: `floating` (large scrollable clock, no card) or `classic` |
 | `blur` | `0.67` | Floating style: blur behind the overlay, `0` (off) to `1` |

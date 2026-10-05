@@ -35,9 +35,11 @@ Ominder installs nothing. It uses tools that ship with Omarchy: a systemd user s
 | `Super+Ctrl+Alt+R` | Open the reminder panel |
 | `Super+Shift+Ctrl+R` | Clear one-time reminders |
 
-The create overlay has two fields. Type a time in *when* and press Enter, type the message and press Enter again. The line above the fields previews when the reminder fires. Escape clears a field, then closes the overlay.
+The create overlay has two fields. Type a time in *when* and press Enter, type the message and press Enter again. Escape clears a field, then closes the overlay.
 
-Clicking the bell opens the panel: upcoming reminders with edit and delete, **Clear** (one-time reminders), **Reset** (everything, after confirmation), and settings. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates.
+Above the fields, a large clock shows when the reminder fires, with the day, countdown, and repeat underneath. To adjust the time, scroll over the hours or minutes, or press Up/Down in either field (one minute; with Shift, one hour). Scrolling keeps the form of what you typed: `fri 14:30` becomes `fri 14:31`, and `30` becomes `31m`. Interval repeats such as `every 30m` cannot be scrolled. The **Classic** style setting brings back the compact card with a one-line preview.
+
+Clicking the bell opens the panel, which lists upcoming reminders with edit and delete. The header holds **Clear** (one-time reminders), **Reset** (everything, after confirmation), **New**, and the settings cog. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates. `s` or `l` opens settings, and `h` or Escape returns to the list.
 
 Left-clicking a reminder notification snoozes it. Right-clicking dismisses it.
 
@@ -90,6 +92,10 @@ Settings live on the Ominder entry in `~/.config/omarchy/shell.json` and can be 
 | `sound` | `true` | Play a sound when a reminder fires |
 | `soundFile` | `/usr/share/sounds/freedesktop/stereo/complete.oga` | Played with `pw-play` |
 | `snoozeMinutes` | `5` | Snooze length |
+| `style` | `floating` | Create overlay style: `floating` (large scrollable clock, no card) or `classic` |
+| `blur` | `0.67` | Floating style: blur behind the overlay, `0` (off) to `1` |
+| `dim` | `0` | Floating style: how much the overlay darkens the screen, `0` (none) to `1` |
+| `performanceMode` | `false` | Turn off the clock animation |
 
 ## How it works
 
@@ -110,7 +116,7 @@ omarchy plugin remove io.github.excalimbito.ominder
 node test.js     # time parser
 bash test.sh     # CLI, against temporary XDG directories
 omarchy plugin validate .
-qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml ReminderFlow.qml
+/usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml ReminderFlow.qml
 ```
 
 Changes to `ReminderFlow.qml` need `omarchy-restart-shell`, because the overlay stays loaded between summons.

@@ -44,6 +44,14 @@ Timers do **not** use `Persistent=true`. A reminder whose time passed while the 
 | `sound` | `true` |
 | `soundFile` | `/usr/share/sounds/freedesktop/stereo/complete.oga` |
 | `snoozeMinutes` | `5` (choices: 5 / 10 / 15 / 30) |
+| `style` | `floating` (choices: `floating` / `classic`). Create overlay style |
+| `blur` | `0.67` (0 to 1). Floating style: strength of the blur behind the overlay. `0` turns it off |
+| `dim` | `0` (0 to 1). Floating style: opacity of the scrim, in the theme's scrim colour. `0` means no dimming |
+| `performanceMode` | `false`. Disables the drum animation |
+
+`blur`, `dim`, and `performanceMode` are hidden in the panel when `style` is `classic`.
+
+The CLI and the overlay both read settings from the plugin's bar entry first, then from its `plugins[]` entry. The overlay watches `shell.json` with a `FileView`, because the shell API it receives does not refresh on settings edits.
 
 ## CLI — `bin/ominder`
 
@@ -91,7 +99,29 @@ Repeats map to `OnCalendar=` or `OnUnitActiveSec=`. Raw `OnCalendar` strings are
 
 ## Create overlay
 
-A single card with a live preview and two stacked fields:
+Two stacked fields, *when* and *message*, in one of two styles chosen by the `style` setting.
+
+**Floating** (default): no card. The fields have only an underline and sit centered on the scrim, below a drum and a context line. Omarchy turns Hyprland's blur off, so the overlay takes a still of its screen with `ScreencopyView` as it opens and blurs it by `blur`; the window waits for the still (at most 250 ms) so the still never contains the overlay itself. The scrim's opacity is `dim`.
+
+```
+        13   29          ← neighbours, dimmed and half clipped
+        14 : 30          ← fire time
+        15   31
+   Fri · in 2h10m · daily   ← day, countdown, repeat, or inline error
+   ____tomorrow 9:00____
+   ____pay boleto_______
+```
+
+- The drum shows the parsed fire time. While *when* is empty it shows the current time, dimmed. While *when* is invalid it shows the last valid time, dimmed, and the error appears on the context line. Interval repeats are dimmed and cannot be scrolled.
+- The mouse wheel over the hour column steps ±1 hour; over the minute column it steps ±1 minute. Up/Down in either field steps ±1 minute, Shift+Up/Down ±1 hour.
+- *when* stays the source of truth. A step rewrites its text with `TimeParser.shift`:
+  - A trailing `HH:MM` is replaced in place and its prefix is kept (`fri 14:30` → `fri 14:31`, `every weekday 8:00` → `every weekday 08:01`). Minutes carry into the hour. Hours wrap from 23 to 00 without touching the prefix. A date scrolled into the past shows "That time has passed" and can still be scrolled back.
+  - A duration stays a duration, with a 1 minute minimum (`30` → `31m`, `1h30m` → `1h29m`).
+  - Empty text becomes the clock time now ± the step. The parser rolls a past clock time into tomorrow.
+  - `every <duration>` and unrecognized text are not changed.
+- A changed value rolls the drum column in the step's direction over 120 ms, unless `performanceMode` is on.
+
+**Classic**: the v0.1.0 card, with a one-line preview and no drum:
 
 ```
 → Thu 14:30 · in 2h10m · daily      ← live preview / inline error
@@ -99,20 +129,29 @@ A single card with a live preview and two stacked fields:
 [ message: pay boleto            ]
 ```
 
+Both styles:
+
 - Tab / Shift+Tab move between fields.
 - Enter in *when* moves to *message*. Enter in *message* submits.
-- An invalid *when* shows the error on the preview line, not as a notification.
-- Escape clears the current field, then closes.
+- An invalid *when* shows the error inline, not as a notification.
+- Escape clears the current field, then closes. Clicking the scrim closes.
 - Edit from the panel opens this overlay with both fields prefilled.
 
 ## Panel
 
-Opened from the bar widget or `ominder panel`.
+Opened from the bar widget or `ominder panel`. It always opens on the list view.
 
-- A list of upcoming reminders: time, message, and a repeat icon. Each row has edit and delete.
-- **Clear** removes one-time reminders immediately.
-- **Reset** removes everything after an inline confirmation, with no modal dialog.
-- **Settings**: sound on/off, sound file, default snooze length.
+**List view.** The header reads *Reminders*, with icon buttons on the right:
+
+- **Clear** removes one-time reminders immediately. **Reset** removes everything after an inline confirmation that replaces the header row, with no modal dialog. Both are hidden while the list is empty.
+- **New** opens the create overlay.
+- **Settings** (cog) switches to the settings view.
+
+Below the header, upcoming reminders show time, message, and a repeat icon, each with edit and delete. The list scrolls once it passes about six rows, and the cursor row is kept in view.
+
+**Settings view.** The header reads *Settings*, with an X that returns to the list. Controls: sound on/off, sound file, default snooze length, style, and, for the floating style, blur and dim sliders and performance mode. Settings are mouse-only.
+
+**Keys:** `j`/`k` move the cursor, Enter edits, `x` deletes, `n` creates. `s` or `l` opens settings. `h` or Escape returns to the list, and Escape on the list closes the panel. Tab switches between bar panels.
 
 ## Notifications
 
@@ -149,7 +188,7 @@ The bar widget watches `reminders.json` with a `FileView` (`watchChanges: true`)
 
 ## Tests
 
-- `test.js`: a table of time expressions and their expected fire times, run against `TimeParser.js`.
+- `test.js`: tables of time expressions with their expected fire times, and of `shift` steps with their rewritten text, run against `TimeParser.js`.
 - `test.sh`: runs the CLI with a temporary `XDG_STATE_HOME` and `XDG_CONFIG_HOME` through create, list, rm, clear, reset, and sweep/import.
 - Before publishing: `omarchy plugin validate` and `qmllint -I "$OMARCHY_PATH/shell"` on every QML file.
 
@@ -169,3 +208,4 @@ Deferred to later versions:
 - Review how the repeat grammar is implemented once the plugin works.
 - Review the parser path (shell call, with `qml6` fallback) for speed and reliability.
 - Revisit missed-reminder behaviour.
+- Vim-style keyboard navigation in the panel's settings view, with a visible focus indicator on the current control.

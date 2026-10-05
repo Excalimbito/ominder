@@ -49,6 +49,7 @@ Timers do **not** use `Persistent=true`. A reminder whose time passed while the 
 | `dim` | `0` (0 to 1). Floating style: opacity of the scrim, in the theme's scrim colour. `0` means no dimming |
 | `performanceMode` | `false`. Disables the drum animation |
 | `showCount` | `true`. Shows the number of upcoming reminders next to the bell |
+| `countScope` | `all` (choices: `all` / `today`). Which reminders the bell counts: every upcoming one, or only those whose next fire is today |
 | `emptyBell` | `dimmed` (choices: `dimmed` / `hidden`). The bell with no upcoming reminders |
 
 The CLI and the overlay both read settings from the plugin's bar entry first, then from its `plugins[]` entry. The overlay watches `shell.json` with a `FileView`, because the shell API it receives does not refresh on settings edits.
@@ -147,7 +148,7 @@ Opened from the bar widget or `ominder panel`. It always opens on the list view.
 - **New** opens the create overlay.
 - **Settings** (cog) switches to the settings view.
 
-Below the header, upcoming reminders show time, message, and a repeat icon, each with edit and delete. The list scrolls once it passes about six rows, and the cursor row is kept in view.
+Below the header, upcoming reminders show time, message, and a repeat icon, each with edit and delete. They are sorted by next fire time, soonest first, and split into two groups under section headers: **Today** (next fire on the current date) and **Future** (everything later), with a separator between them. The list scrolls once it passes about six rows, and the cursor row is kept in view.
 
 **Settings view.** The header reads *Settings*, with a reset button that returns every setting to its default and an X that returns to the list. The sound file field has a folder button that opens a file chooser. The chooser runs as its own `qml6` process (`bin/pick-sound.qml`), because a GTK file dialog inside the shell process can crash the shell; the chosen path comes back on its output. The Hyprland stub floats and centers that window. Controls, in two groups: sound on/off, sound file, default snooze length; then style, the blur and dim sliders, the bell with no reminders, show count, and performance mode. Blur, dim, and performance mode only affect the floating style. While the blur or dim slider moves, and for 1.2 s after, the create overlay opens under the panel in preview mode: a sample reminder at the sliders' values, on the layer below the panel, with no keyboard focus and no input. Settings are mouse-only.
 
@@ -184,7 +185,7 @@ Plugins have no enable/disable/remove hooks, so the bindings are managed like th
 
 ## Bar widget
 
-A bell, `󰢌`, followed by the number of upcoming reminders unless `showCount` is off. With no reminders the bell is dimmed, or hidden when `emptyBell` is `hidden`.
+A bell, `󰢌`, followed by the number of upcoming reminders unless `showCount` is off. With `countScope` set to `today`, only reminders whose next fire is today are counted. With no reminders the bell is dimmed, or hidden when `emptyBell` is `hidden`.
 
 ## Bar widget refresh
 

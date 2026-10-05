@@ -16,6 +16,7 @@ BarWidget {
   property string stateText: "[]"
 
   // Upcoming reminders with `at` moved to the next fire time, soonest first.
+  // `today` marks the ones whose next fire falls on the current date.
   readonly property var reminders: {
     var list = []
     try { list = JSON.parse(root.stateText || "[]") } catch (e) { list = [] }
@@ -29,11 +30,17 @@ BarWidget {
         // ponytail: assumes the interval kept ticking from creation; suspend drift is ignored
         next.at += Math.ceil((now.getTime() / 1000 - entry.at) / entry.everySeconds) * entry.everySeconds
       }
+      next.today = new Date(next.at * 1000).toDateString() === now.toDateString()
       return next
     }).filter(function(entry) {
       return entry.onCalendar || entry.everySeconds > 0 || entry.at * 1000 > now.getTime()
     }).sort(function(a, b) { return a.at - b.at })
   }
+
+  // The bell counts every upcoming reminder, or only today's when countScope is "today".
+  readonly property int count: root.setting("countScope", "all") === "today"
+    ? root.reminders.filter(function(entry) { return entry.today }).length
+    : root.reminders.length
 
   function run(args) {
     Quickshell.execDetached([root.ominder].concat(args))
@@ -128,9 +135,10 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.reminders.length > 0 && root.setting("showCount", true) ? "󰢌 " + root.reminders.length : "󰢌"
+    text: root.count > 0 && root.setting("showCount", true) ? "󰢌 " + root.count : "󰢌"
     dimmed: root.reminders.length === 0
-    tooltipText: root.reminders.length === 1 ? "1 reminder" : root.reminders.length + " reminders"
+    tooltipText: (root.count === 1 ? "1 reminder" : root.count + " reminders")
+      + (root.setting("countScope", "all") === "today" ? " today" : "")
     onPressed: function(b) {
       if (b === Qt.LeftButton) root.toggle()
     }

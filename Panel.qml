@@ -27,6 +27,7 @@ Panel {
   readonly property string ominder: Qt.resolvedUrl("bin/ominder").toString().replace(/^file:\/\//, "")
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property int labelWidth: Style.space(92)
+  readonly property real seamWidth: Border.uniformWidth(Border.controlSpec("normal", root.barForeground, Color.accent))
 
   function open() {
     root.confirmReset = false
@@ -262,78 +263,99 @@ Panel {
           Column {
             id: rowColumn
             width: listFlick.width
+            bottomPadding: Style.spacing.sm
 
+            // Rows come soonest first, so Today's rows lead and each group starts
+            // where `today` changes. The header belongs to the group's first row.
             Repeater {
               id: rows
               model: root.reminders
-              CursorSurface {
+              Column {
                 id: row
                 required property var modelData
                 required property int index
+                readonly property bool startsGroup: index === 0 || modelData.today !== root.reminders[index - 1].today
                 width: rowColumn.width
-                implicitHeight: rowContent.implicitHeight + Style.spacing.md * 2
-                hasCursor: root.cursor === index
-                foreground: root.barForeground
+                spacing: Style.spacing.xs
 
-                MouseArea {
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  onContainsMouseChanged: if (containsMouse) root.cursor = row.index
-                  onClicked: root.edit(row.index)
+                PanelSeparator {
+                  visible: row.startsGroup && row.index > 0
+                  foreground: root.barForeground
                 }
 
-                Row {
-                  id: rowContent
-                  anchors.fill: parent
-                  anchors.margins: Style.spacing.md
-                  anchors.leftMargin: Style.spacing.rowPaddingX
-                  spacing: Style.spacing.sm
+                PanelSectionHeader {
+                  visible: row.startsGroup
+                  text: row.modelData.today ? "Today" : "Future"
+                  foreground: root.barForeground
+                  fontFamily: root.fontFamily
+                }
 
-                  Column {
-                    width: parent.width - editButton.width - deleteButton.width - parent.spacing * 2
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.spacing.xs
+                CursorSurface {
+                  width: rowColumn.width
+                  implicitHeight: rowContent.implicitHeight + Style.spacing.md * 2
+                  hasCursor: root.cursor === row.index
+                  foreground: root.barForeground
 
-                    Text {
-                      width: parent.width
-                      textFormat: Text.PlainText
-                      text: (row.modelData.repeat ? "󰑖 " : "") + row.modelData.message
-                      color: root.barForeground
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                      font.bold: true
-                      elide: Text.ElideRight
-                    }
-
-                    Text {
-                      width: parent.width
-                      textFormat: Text.PlainText
-                      text: TimeParser.describe(row.modelData, root.now)
-                      color: root.barForeground
-                      opacity: 0.7
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      elide: Text.ElideRight
-                    }
-                  }
-
-                  PanelActionButton {
-                    id: editButton
-                    anchors.verticalCenter: parent.verticalCenter
-                    iconText: "󰏫"
-                    tooltipText: "Edit"
-                    foreground: root.barForeground
+                  MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onContainsMouseChanged: if (containsMouse) root.cursor = row.index
                     onClicked: root.edit(row.index)
                   }
 
-                  PanelActionButton {
-                    id: deleteButton
-                    anchors.verticalCenter: parent.verticalCenter
-                    iconText: "󰆴"
-                    tooltipText: "Delete (x)"
-                    foreground: root.barForeground
-                    hoverColor: Color.urgent
-                    onClicked: root.remove(row.index)
+                  Row {
+                    id: rowContent
+                    anchors.fill: parent
+                    anchors.margins: Style.spacing.md
+                    anchors.leftMargin: Style.spacing.rowPaddingX
+                    spacing: Style.spacing.sm
+
+                    Column {
+                      width: parent.width - editButton.width - deleteButton.width - parent.spacing * 2
+                      anchors.verticalCenter: parent.verticalCenter
+                      spacing: Style.spacing.xs
+
+                      Text {
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        text: (row.modelData.repeat ? "󰑖 " : "") + row.modelData.message
+                        color: root.barForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.body
+                        font.bold: true
+                        elide: Text.ElideRight
+                      }
+
+                      Text {
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        text: TimeParser.describe(row.modelData, root.now)
+                        color: root.barForeground
+                        opacity: 0.7
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                        elide: Text.ElideRight
+                      }
+                    }
+
+                    PanelActionButton {
+                      id: editButton
+                      anchors.verticalCenter: parent.verticalCenter
+                      iconText: "󰏫"
+                      tooltipText: "Edit"
+                      foreground: root.barForeground
+                      onClicked: root.edit(row.index)
+                    }
+
+                    PanelActionButton {
+                      id: deleteButton
+                      anchors.verticalCenter: parent.verticalCenter
+                      iconText: "󰆴"
+                      tooltipText: "Delete (x)"
+                      foreground: root.barForeground
+                      hoverColor: Color.urgent
+                      onClicked: root.remove(row.index)
+                    }
                   }
                 }
               }
@@ -360,7 +382,7 @@ Panel {
           Row {
             visible: root.setting("sound", true)
             width: settingsColumn.width
-            spacing: Style.spacing.sm
+            spacing: -root.seamWidth
 
             // Empty means bin/ominder's default sound.
             TextField {
@@ -373,14 +395,24 @@ Panel {
               font.family: root.fontFamily
               Keys.onEscapePressed: keyCatcher.forceActiveFocus()
               onEditingFinished: if (text !== root.setting("soundFile", "")) root.saveSetting("soundFile", text)
+              Component.onCompleted: {
+                background.topRightRadius = 0
+                background.bottomRightRadius = 0
+              }
             }
 
-            PanelActionButton {
+            Button {
               id: browseButton
               anchors.verticalCenter: parent.verticalCenter
+              height: soundFileField.height
+              z: hot ? 1 : 0
+              topLeftRadius: 0
+              bottomLeftRadius: 0
+              bordered: true
               iconText: "󰉋"
               tooltipText: "Choose a sound file"
               foreground: root.barForeground
+              fontFamily: root.fontFamily
               onClicked: if (!soundPicker.running) soundPicker.running = true
             }
           }
@@ -431,14 +463,47 @@ Panel {
             ]
           }
 
-          Toggle {
+          // The Show count toggle and its Count choice share one card.
+          BorderSurface {
+            id: countCard
             width: settingsColumn.width
-            label: "Show count"
-            description: "Number of upcoming reminders next to the bell"
-            checked: root.setting("showCount", true)
-            foreground: root.barForeground
-            fontFamily: root.fontFamily
-            onClicked: root.saveSetting("showCount", !checked)
+            implicitHeight: countColumn.implicitHeight
+            radius: Style.cornerRadius
+            color: Style.controlFill(false, countHover.hovered, root.barForeground, Color.accent)
+            borderSpec: Border.controlSpec(countHover.hovered ? "hover-cursor" : "normal", root.barForeground, Color.accent)
+
+            HoverHandler { id: countHover }
+
+            Column {
+              id: countColumn
+              width: parent.width
+              bottomPadding: countChoice.visible ? Style.spacing.rowPaddingX : 0
+
+              Toggle {
+                width: parent.width
+                label: "Show count"
+                description: "Number of upcoming reminders next to the bell"
+                checked: root.setting("showCount", true)
+                color: "transparent"
+                borderSpec: Border.none()
+                foreground: root.barForeground
+                fontFamily: root.fontFamily
+                onClicked: root.saveSetting("showCount", !checked)
+              }
+
+              SettingChoice {
+                id: countChoice
+                visible: root.setting("showCount", true)
+                leftPadding: countCard.borderLeft + Style.spacing.rowPaddingX
+                label: "Count type"
+                key: "countScope"
+                fallback: "all"
+                options: [
+                  { value: "today", label: "Today only" },
+                  { value: "all", label: "All" }
+                ]
+              }
+            }
           }
 
           Toggle {
@@ -509,7 +574,7 @@ Panel {
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
-      width: root.labelWidth
+      width: root.labelWidth - choice.leftPadding
       textFormat: Text.PlainText
       text: choice.label
       color: root.barForeground
@@ -517,13 +582,33 @@ Panel {
       font.pixelSize: Style.font.body
     }
 
-    ButtonGroup {
-      options: choice.options
-      value: String(root.setting(choice.key, choice.fallback))
-      foreground: root.barForeground
-      fontFamily: root.fontFamily
-      focusable: false
-      onChanged: function(value) { root.saveSetting(choice.key, typeof choice.fallback === "number" ? Number(value) : value) }
+    // One joined control: neighbours overlap by a border width and only the
+    // outer ends keep rounded corners.
+    Row {
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: -root.seamWidth
+
+      Repeater {
+        model: choice.options
+
+        Button {
+          required property var modelData
+          required property int index
+          readonly property bool first: index === 0
+          readonly property bool last: index === choice.options.length - 1
+          z: hot ? 2 : (selected ? 1 : 0)
+          topLeftRadius: first ? radius : 0
+          bottomLeftRadius: first ? radius : 0
+          topRightRadius: last ? radius : 0
+          bottomRightRadius: last ? radius : 0
+          text: modelData.label
+          selected: modelData.value === String(root.setting(choice.key, choice.fallback))
+          bordered: true
+          foreground: root.barForeground
+          fontFamily: root.fontFamily
+          onClicked: root.saveSetting(choice.key, typeof choice.fallback === "number" ? Number(modelData.value) : modelData.value)
+        }
+      }
     }
   }
 

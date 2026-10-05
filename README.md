@@ -48,7 +48,7 @@ The create overlay has two fields. Type a time in *when* and press Enter, type t
 
 Above the fields, a large clock shows when the reminder fires, with the day, countdown, and repeat underneath. To adjust the time, scroll over the hours or minutes, or press Up/Down in either field (one minute; with Shift, one hour). Scrolling keeps the form of what you typed: `fri 14:30` becomes `fri 14:31`, and `30` becomes `31m`. Interval repeats such as `every 30m` cannot be scrolled. The **Classic** style setting brings back the compact card with a one-line preview.
 
-Clicking the bell opens the panel, which lists upcoming reminders with edit and delete. The header holds **Clear** (one-time reminders), **Reset** (everything, after confirmation), **New**, and the settings cog. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates. `s` or `l` opens settings, and `h` or Escape returns to the list. In settings, the folder button next to the sound file opens a file chooser, and the reset button in the header returns every setting to its default.
+Clicking the bell opens the panel, which lists upcoming reminders, soonest first, grouped into **Today** and **Future**, with edit and delete. The header holds **Clear** (one-time reminders), **Reset** (everything, after confirmation), **New**, and the settings cog. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates. `s` or `l` opens settings, and `h` or Escape returns to the list. In settings, the folder button next to the sound file opens a file chooser, and the reset button in the header returns every setting to its default.
 
 Left-clicking a reminder notification snoozes it. Right-clicking dismisses it.
 
@@ -106,6 +106,7 @@ Settings live on the Ominder entry in `~/.config/omarchy/shell.json` and can be 
 | `dim` | `0` | Floating style: how much the overlay darkens the screen, `0` (none) to `1` |
 | `performanceMode` | `false` | Turn off the clock animation |
 | `showCount` | `true` | Show the number of upcoming reminders next to the bell |
+| `countScope` | `all` | What the bell counts: `all` upcoming reminders or only `today`'s |
 | `emptyBell` | `dimmed` | Bell with no reminders: `dimmed` or `hidden` |
 
 ## How it works

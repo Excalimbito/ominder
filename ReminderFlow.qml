@@ -25,7 +25,7 @@ Item {
   property var borderSpec: Border.surfaceSpec("menu", "border", border, Math.max(1, Style.space(2)))
   // Floating style dims the screen by the `dim` setting (0 to 1) in the theme's scrim colour.
   property color scrim: root.floating
-    ? Qt.rgba(Color.menu.scrim.r, Color.menu.scrim.g, Color.menu.scrim.b, root.unit(root.settings.dim, 0))
+    ? Util.alpha(Color.menu.scrim, root.previewing ? root.preview.dim : root.setting("dim", 0))
     : Color.menu.scrim
   readonly property int cornerRadius: Style.cornerRadius
   property int contentMargin: Style.spacing.panelPadding
@@ -39,26 +39,29 @@ Item {
   // Settings come from the plugin's shell.json entry, read the same way bin/ominder reads them.
   readonly property string shellConfigFile: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/shell.json"
   property var settings: ({})
-  readonly property bool floating: root.settings.style !== "classic"
-  readonly property bool animate: root.settings.performanceMode !== true
-  readonly property real blurAmount: root.unit(root.settings.blur, 0.67)
-  readonly property bool blur: root.floating && root.blurAmount > 0
+  readonly property bool floating: root.setting("style", "floating") !== "classic"
+  // Preview mode: the panel shows the overlay, untouchable and under itself, with a sample
+  // reminder while its blur and dim sliders move. `preview` holds the slider values.
+  property bool previewing: false
+  property var preview: ({ blur: 0, dim: 0 })
+  readonly property real blurAmount: Util.clampAlpha(root.previewing ? root.preview.blur : root.setting("blur", 0))
+  readonly property bool blurEnabled: root.floating && root.blurAmount > 0
   // The window waits for the blurred still, so the still never contains the overlay itself.
-  readonly property bool ready: !root.blur || backdrop.hasContent || captureTimeout.triggeredOnce
+  readonly property bool ready: !root.blurEnabled || backdrop.hasContent || !captureTimeout.running
 
-  // Floating style: the drum shows the parsed time, the last valid one while the text is invalid,
-  // and the current time while it is empty. +1 / -1 while a scroll step rolls the drum.
+  // Floating style: the drum shows the parsed time (a passed date included), the last valid
+  // one while the text is unrecognized, and the current time while it is empty.
+  // +1 / -1 while a scroll step rolls the drum.
   property var lastValid: null
   property int stepDirection: 0
   readonly property bool hasText: whenField.text.trim() !== ""
-  readonly property date drumDate: !root.parsed.error ? new Date(root.parsed.at * 1000) : (root.hasText && root.lastValid ? root.lastValid : clock.date)
-  readonly property bool drumLive: !root.parsed.error && !root.parsed.everySeconds
+  readonly property date drumDate: root.parsed.at ? new Date(root.parsed.at * 1000) : (root.hasText && root.lastValid ? root.lastValid : clock.date)
 
   onParsedChanged: if (!root.parsed.error) root.lastValid = new Date(root.parsed.at * 1000)
 
-  // A 0 to 1 setting, or `fallback` when it is missing or not a number.
-  function unit(value, fallback) {
-    return typeof value === "number" && isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback
+  function setting(key, fallback) {
+    var value = root.settings[key]
+    return value === undefined || value === null ? fallback : value
   }
 
   function readSettings(text) {
@@ -101,21 +104,32 @@ Item {
     try { payload = JSON.parse(payloadJson || "{}") } catch (e) { payload = ({}) }
     if (payload.fontFamily) root.fontFamily = payload.fontFamily
 
+    if (payload.preview) {
+      root.preview = { blur: Number(payload.preview.blur) || 0, dim: Number(payload.preview.dim) || 0 }
+      if (root.previewing && root.opened) return
+      root.previewing = true
+      payload = { when: "every day 14:30", message: "Stretch" }
+    } else {
+      root.previewing = false
+    }
+
     root.editId = payload.id || ""
     root.lastValid = null
     whenField.text = payload.when || ""
     messageField.text = payload.message || ""
-    if (!root.opened) captureTimeout.triggeredOnce = false
+    if (!root.opened) captureTimeout.restart()
     root.opened = true
-    if (panel.visible) whenField.forceActiveFocus()
+    if (panel.visible && !root.previewing) whenField.forceActiveFocus()
   }
 
   function close() {
     root.opened = false
+    root.previewing = false
   }
 
   function dismiss() {
     root.opened = false
+    root.previewing = false
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "omarchy.reminders")
   }
@@ -146,10 +160,7 @@ Item {
   // Opens without blur if the screen cannot be captured.
   Timer {
     id: captureTimeout
-    property bool triggeredOnce: false
     interval: 250
-    running: root.opened && !root.ready
-    onTriggered: triggeredOnce = true
   }
 
   SystemClock {
@@ -175,14 +186,14 @@ Item {
     property int count: 60
     property int minutes: 1
     property real offset: 0
-    property real wheelDelta: 0
+    property real wheelRemainder: 0
 
     implicitWidth: metrics.advanceWidth("00")
     implicitHeight: metrics.height * 2
     clip: true
 
     onValueChanged: {
-      if (root.stepDirection === 0 || !root.animate) return
+      if (root.stepDirection === 0 || root.setting("performanceMode", false)) return
       roll.stop()
       drum.offset = root.stepDirection * metrics.height
       roll.start()
@@ -228,12 +239,9 @@ Item {
     MouseArea {
       anchors.fill: parent
       onWheel: function(wheel) {
-        drum.wheelDelta += wheel.angleDelta.y
-        while (Math.abs(drum.wheelDelta) >= 120) {
-          var direction = drum.wheelDelta > 0 ? 1 : -1
-          drum.wheelDelta -= direction * 120
-          root.step(direction * drum.minutes)
-        }
+        var result = Util.wheelSteps(drum.wheelRemainder, wheel.angleDelta.y)
+        drum.wheelRemainder = result.remainder
+        if (result.steps) root.step(result.steps * drum.minutes)
       }
     }
   }
@@ -241,28 +249,36 @@ Item {
   PanelWindow {
     id: panel
     visible: root.opened && root.ready
-    onVisibleChanged: if (visible) whenField.forceActiveFocus()
+    onVisibleChanged: if (visible && !root.previewing) whenField.forceActiveFocus()
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     WlrLayershell.namespace: "omarchy-reminders"
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    WlrLayershell.layer: root.previewing ? WlrLayer.Top : WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: root.previewing ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
+    mask: root.previewing ? noInput : null
+
+    Region { id: noInput }
 
     // Floating style blurs a still of the screen taken as the overlay opens.
     // Hyprland's own blur is off in Omarchy, so the blur is drawn here.
-    ScreencopyView {
+    // Each open builds a new capture, so the window waits for a still taken before it showed.
+    Loader {
       id: backdrop
+      readonly property bool hasContent: !!item && item.hasContent
       anchors.fill: parent
-      visible: false
-      // A fresh source on each open takes a fresh still.
-      captureSource: root.blur && root.opened ? panel.screen : null
+      active: root.blurEnabled && root.opened
+
+      sourceComponent: ScreencopyView {
+        visible: false
+        captureSource: panel.screen
+      }
     }
 
     MultiEffect {
       anchors.fill: parent
-      visible: root.blur && backdrop.hasContent
-      source: backdrop
+      visible: root.blurEnabled && backdrop.hasContent
+      source: backdrop.item
       autoPaddingEnabled: false
       blurEnabled: true
       blur: root.blurAmount
@@ -304,7 +320,7 @@ Item {
         Row {
           visible: root.floating
           anchors.horizontalCenter: parent.horizontalCenter
-          opacity: root.drumLive ? 1 : 0.45
+          opacity: !root.parsed.error && !root.parsed.everySeconds ? 1 : 0.45
 
           DrumColumn {
             value: root.drumDate.getHours()

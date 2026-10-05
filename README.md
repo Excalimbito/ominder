@@ -4,7 +4,16 @@ Reminders for [Omarchy](https://omarchy.org): flexible times, repeats, snooze, n
 
 > **Status:** early development. The plugin currently ships simple functionality and UI. See [`docs/SPEC.md`](docs/SPEC.md) for the planned behaviour so far.
 
-![Preview](./preview.png)
+<p align="center">
+  <img src="./preview.jpg" alt="Ominder: create overlay, reminder list, and settings" width="640">
+</p>
+
+<details>
+<summary>Classic style</summary>
+<p align="center">
+  <img src="./preview_classic.jpg" alt="Classic overlay style and the v0.1.0 panel" width="560">
+</p>
+</details>
 
 ## Install
 
@@ -35,9 +44,11 @@ Ominder installs nothing. It uses tools that ship with Omarchy: a systemd user s
 | `Super+Ctrl+Alt+R` | Open the reminder panel |
 | `Super+Shift+Ctrl+R` | Clear one-time reminders |
 
-The create overlay has two fields. Type a time in *when* and press Enter, type the message and press Enter again. The line above the fields previews when the reminder fires. Escape clears a field, then closes the overlay.
+The create overlay has two fields. Type a time in *when* and press Enter, type the message and press Enter again. Escape clears a field, then closes the overlay.
 
-Clicking the bell opens the panel: upcoming reminders with edit and delete, **Clear** (one-time reminders), **Reset** (everything, after confirmation), and settings. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates.
+Above the fields, a large clock shows when the reminder fires, with the day, countdown, and repeat underneath. To adjust the time, scroll over the hours or minutes, or press Up/Down in either field (one minute; with Shift, one hour). Scrolling keeps the form of what you typed: `fri 14:30` becomes `fri 14:31`, and `30` becomes `31m`. Interval repeats such as `every 30m` cannot be scrolled. The **Classic** style setting brings back the compact card with a one-line preview.
+
+Clicking the bell opens the panel, which lists upcoming reminders with edit and delete. The header holds **Clear** (one-time reminders), **Reset** (everything, after confirmation), **New**, and the settings cog. In the panel, `j`/`k` move, Enter edits, `x` deletes, and `n` creates. `s` or `l` opens settings, and `h` or Escape returns to the list. In settings, the folder button next to the sound file opens a file chooser, and the reset button in the header returns every setting to its default.
 
 Left-clicking a reminder notification snoozes it. Right-clicking dismisses it.
 
@@ -88,8 +99,14 @@ Settings live on the Ominder entry in `~/.config/omarchy/shell.json` and can be 
 | Key | Default | |
 |---|---|---|
 | `sound` | `true` | Play a sound when a reminder fires |
-| `soundFile` | `/usr/share/sounds/freedesktop/stereo/complete.oga` | Played with `pw-play` |
+| `soundFile` | `/usr/share/sounds/freedesktop/stereo/window-attention.oga` | Played with `pw-play` |
 | `snoozeMinutes` | `5` | Snooze length |
+| `style` | `floating` | Create overlay style: `floating` (large scrollable clock, no card) or `classic` |
+| `blur` | `0` | Floating style: blur behind the overlay, `0` (off) to `1` |
+| `dim` | `0` | Floating style: how much the overlay darkens the screen, `0` (none) to `1` |
+| `performanceMode` | `false` | Turn off the clock animation |
+| `showCount` | `true` | Show the number of upcoming reminders next to the bell |
+| `emptyBell` | `dimmed` | Bell with no reminders: `dimmed` or `hidden` |
 
 ## How it works
 

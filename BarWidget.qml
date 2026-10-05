@@ -69,8 +69,12 @@ BarWidget {
     target.hostWidget = root
   }
 
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  // With no reminders the bell is dimmed, or hidden when emptyBell is "hidden".
+  readonly property bool hidden: root.reminders.length === 0 && root.setting("emptyBell", "dimmed") === "hidden"
+
+  visible: !root.hidden
+  implicitWidth: root.hidden ? 0 : button.implicitWidth
+  implicitHeight: root.hidden ? 0 : button.implicitHeight
 
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
@@ -124,7 +128,8 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.reminders.length > 0 ? "󰢌 " + root.reminders.length : "󰢌"
+    text: root.reminders.length > 0 && root.setting("showCount", true) ? "󰢌 " + root.reminders.length : "󰢌"
+    dimmed: root.reminders.length === 0
     tooltipText: root.reminders.length === 1 ? "1 reminder" : root.reminders.length + " reminders"
     onPressed: function(b) {
       if (b === Qt.LeftButton) root.toggle()

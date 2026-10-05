@@ -49,6 +49,9 @@ Timers do **not** use `Persistent=true`. A reminder whose time passed while the 
 | `dim` | `0` (0 to 1). Floating style: opacity of the scrim, in the theme's scrim colour. `0` means no dimming |
 | `performanceMode` | `false`. Disables the drum animation |
 
+| `showCount` | `true`. Shows the number of upcoming reminders next to the bell |
+| `emptyBell` | `dimmed` (choices: `dimmed` / `hidden`). The bell with no upcoming reminders |
+
 `blur`, `dim`, and `performanceMode` are hidden in the panel when `style` is `classic`.
 
 The CLI and the overlay both read settings from the plugin's bar entry first, then from its `plugins[]` entry. The overlay watches `shell.json` with a `FileView`, because the shell API it receives does not refresh on settings edits.
@@ -101,7 +104,7 @@ Repeats map to `OnCalendar=` or `OnUnitActiveSec=`. Raw `OnCalendar` strings are
 
 Two stacked fields, *when* and *message*, in one of two styles chosen by the `style` setting.
 
-**Floating** (default): no card. The fields have only an underline and sit centered on the scrim, below a drum and a context line. Omarchy turns Hyprland's blur off, so the overlay takes a still of its screen with `ScreencopyView` as it opens and blurs it by `blur`; the window waits for the still (at most 250 ms) so the still never contains the overlay itself. The scrim's opacity is `dim`.
+**Floating** (default): no card. The fields have only an underline and sit centered on the scrim, below a drum and a context line. Omarchy turns Hyprland's blur off, so the overlay takes a still of its screen with `ScreencopyView` as it opens and blurs it by `blur`; each open builds a new capture, and the window waits for its still (at most 250 ms) so the still never contains the overlay itself. The scrim's opacity is `dim`.
 
 ```
         13   29          ← neighbours, dimmed and half clipped
@@ -149,7 +152,7 @@ Opened from the bar widget or `ominder panel`. It always opens on the list view.
 
 Below the header, upcoming reminders show time, message, and a repeat icon, each with edit and delete. The list scrolls once it passes about six rows, and the cursor row is kept in view.
 
-**Settings view.** The header reads *Settings*, with a reset button that returns every setting to its default and an X that returns to the list. The sound file field has a folder button that opens a file chooser (Qt's `FileDialog`, native under the GTK platform theme). Controls: sound on/off, sound file, default snooze length, style, and, for the floating style, blur and dim sliders and performance mode. Settings are mouse-only.
+**Settings view.** The header reads *Settings*, with a reset button that returns every setting to its default and an X that returns to the list. The sound file field has a folder button that opens a file chooser (Qt's `FileDialog`, native under the GTK platform theme). Controls, in two groups: sound on/off, sound file, default snooze length; then style, the blur and dim sliders (floating style only), the bell with no reminders, show count, and performance mode (floating style only). While the blur or dim slider moves, and for 1.2 s after, the create overlay opens under the panel in preview mode: a sample reminder at the sliders' values, on the layer below the panel, with no keyboard focus and no input. Settings are mouse-only.
 
 **Keys:** `j`/`k` move the cursor, Enter edits, `x` deletes, `n` creates. `s` or `l` opens settings. `h` or Escape returns to the list, and Escape on the list closes the panel. Tab switches between bar panels.
 
@@ -181,6 +184,10 @@ Plugins have no enable/disable/remove hooks, so the bindings are managed like th
 - **Sweep** (runs on `list`, when the panel opens, and when the bar widget refreshes): imports active `omarchy-reminder-*` timers by stopping each transient timer and recreating it as an Ominder unit with the same fire time and message, then drops past-due one-time entries and orphaned units.
 - **Uninstall safety net:** each unit's `ExecStart` checks that `ominder` still exists. If it doesn't, the unit deletes its own files instead of failing.
 - **Explicit uninstall:** run `ominder uninstall` before `omarchy plugin remove`. The README documents this.
+
+## Bar widget
+
+A bell, `󰢌`, followed by the number of upcoming reminders unless `showCount` is off. With no reminders the bell is dimmed, or hidden when `emptyBell` is `hidden`.
 
 ## Bar widget refresh
 

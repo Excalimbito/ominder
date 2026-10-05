@@ -25,6 +25,7 @@ Panel {
 
   readonly property string ominder: Qt.resolvedUrl("bin/ominder").toString().replace(/^file:\/\//, "")
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property int labelWidth: Style.space(92)
   readonly property string defaultSoundFile: "/usr/share/sounds/freedesktop/stereo/window-attention.oga"
 
   function open() {
@@ -94,7 +95,10 @@ Panel {
 
   onRemindersChanged: if (root.cursor >= root.reminders.length) root.cursor = root.reminders.length - 1
   onCursorChanged: root.revealCursor()
-  onShowSettingsChanged: root.confirmReset = false
+  onShowSettingsChanged: {
+    root.confirmReset = false
+    if (!root.showSettings) root.endPreview()
+  }
 
   KeyboardPanel {
     id: panel
@@ -385,6 +389,7 @@ Panel {
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
+              width: root.labelWidth
               textFormat: Text.PlainText
               text: "Snooze"
               color: root.barForeground
@@ -407,11 +412,14 @@ Panel {
             }
           }
 
+          PanelSeparator { foreground: root.barForeground }
+
           Row {
             spacing: Style.spacing.md
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
+              width: root.labelWidth
               textFormat: Text.PlainText
               text: "Style"
               color: root.barForeground
@@ -433,15 +441,53 @@ Panel {
           }
 
           SettingSlider {
+            id: blurSlider
             label: "Blur"
             key: "blur"
             fallback: 0.67
           }
 
           SettingSlider {
+            id: dimSlider
             label: "Dim"
             key: "dim"
             fallback: 0
+          }
+
+          Row {
+            spacing: Style.spacing.md
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              width: root.labelWidth
+              textFormat: Text.PlainText
+              text: "No reminders"
+              color: root.barForeground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+            }
+
+            ButtonGroup {
+              options: [
+                { value: "dimmed", label: "Dim bell" },
+                { value: "hidden", label: "Hide bell" }
+              ]
+              value: root.setting("emptyBell", "dimmed")
+              foreground: root.barForeground
+              fontFamily: root.fontFamily
+              focusable: false
+              onChanged: function(value) { root.saveSetting("emptyBell", value) }
+            }
+          }
+
+          Toggle {
+            width: settingsColumn.width
+            label: "Show count"
+            description: "Number of upcoming reminders next to the bell"
+            checked: root.setting("showCount", true)
+            foreground: root.barForeground
+            fontFamily: root.fontFamily
+            onClicked: root.saveSetting("showCount", !checked)
           }
 
           Toggle {
@@ -471,11 +517,43 @@ Panel {
     }
   }
 
+  // While a blur or dim slider moves, the overlay opens under the panel in preview mode,
+  // showing a sample reminder at the sliders' values. It closes shortly after they stop.
+  property bool previewing: false
+
+  function previewBackdrop() {
+    if (!root.opened) return
+    previewHold.restart()
+    root.previewing = true
+    if (root.bar && root.bar.shell)
+      root.bar.shell.summon(root.moduleName, JSON.stringify({ preview: { blur: blurSlider.live, dim: dimSlider.live } }))
+  }
+
+  function endPreview() {
+    previewHold.stop()
+    if (!root.previewing) return
+    root.previewing = false
+    if (root.bar && root.bar.shell) root.bar.shell.hide(root.moduleName)
+  }
+
+  onOpenedChanged: if (!root.opened) root.endPreview()
+
+  Timer {
+    id: previewHold
+    interval: 1200
+    onTriggered: {
+      if (blurSlider.dragging || dimSlider.dragging) restart()
+      else root.endPreview()
+    }
+  }
+
   // A 0 to 1 floating-style setting, shown as a percentage and saved when the slider is released.
   component SettingSlider: Row {
     property string label
     property string key
     property real fallback
+    readonly property real live: slider.liveValue
+    readonly property bool dragging: slider.dragging
 
     visible: root.setting("style", "floating") !== "classic"
     width: settingsColumn.width
@@ -484,7 +562,7 @@ Panel {
     Text {
       id: sliderLabel
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(48)
+      width: root.labelWidth
       textFormat: Text.PlainText
       text: parent.label
       color: root.barForeground
@@ -498,6 +576,7 @@ Panel {
       width: parent.width - sliderLabel.width - sliderValue.width - parent.spacing * 2
       bar: root.bar
       value: root.setting(parent.key, parent.fallback)
+      onMoved: root.previewBackdrop()
       onReleased: function(value) { root.saveSetting(parent.key, Math.round(value * 100) / 100) }
     }
 

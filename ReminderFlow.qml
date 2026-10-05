@@ -25,7 +25,7 @@ Item {
   property var borderSpec: Border.surfaceSpec("menu", "border", border, Math.max(1, Style.space(2)))
   // Floating style dims the screen by the `dim` setting (0 to 1) in the theme's scrim colour.
   property color scrim: root.floating
-    ? Qt.rgba(Color.menu.scrim.r, Color.menu.scrim.g, Color.menu.scrim.b, root.unit(root.settings.dim, 0))
+    ? Qt.rgba(Color.menu.scrim.r, Color.menu.scrim.g, Color.menu.scrim.b, root.previewing ? root.preview.dim : root.unit(root.settings.dim, 0))
     : Color.menu.scrim
   readonly property int cornerRadius: Style.cornerRadius
   property int contentMargin: Style.spacing.panelPadding
@@ -41,7 +41,11 @@ Item {
   property var settings: ({})
   readonly property bool floating: root.settings.style !== "classic"
   readonly property bool animate: root.settings.performanceMode !== true
-  readonly property real blurAmount: root.unit(root.settings.blur, 0.67)
+  // Preview mode: the panel shows the overlay, untouchable and under itself, with a sample
+  // reminder while its blur and dim sliders move. `preview` holds the slider values.
+  property bool previewing: false
+  property var preview: ({ blur: 0, dim: 0 })
+  readonly property real blurAmount: root.previewing ? root.preview.blur : root.unit(root.settings.blur, 0.67)
   readonly property bool blur: root.floating && root.blurAmount > 0
   // The window waits for the blurred still, so the still never contains the overlay itself.
   readonly property bool ready: !root.blur || backdrop.hasContent || captureTimeout.triggeredOnce
@@ -101,21 +105,32 @@ Item {
     try { payload = JSON.parse(payloadJson || "{}") } catch (e) { payload = ({}) }
     if (payload.fontFamily) root.fontFamily = payload.fontFamily
 
+    if (payload.preview) {
+      root.preview = { blur: root.unit(payload.preview.blur, 0), dim: root.unit(payload.preview.dim, 0) }
+      if (root.previewing && root.opened) return
+      root.previewing = true
+      payload = { when: "every day 14:30", message: "Stretch" }
+    } else {
+      root.previewing = false
+    }
+
     root.editId = payload.id || ""
     root.lastValid = null
     whenField.text = payload.when || ""
     messageField.text = payload.message || ""
     if (!root.opened) captureTimeout.triggeredOnce = false
     root.opened = true
-    if (panel.visible) whenField.forceActiveFocus()
+    if (panel.visible && !root.previewing) whenField.forceActiveFocus()
   }
 
   function close() {
     root.opened = false
+    root.previewing = false
   }
 
   function dismiss() {
     root.opened = false
+    root.previewing = false
     if (root.shell && typeof root.shell.hide === "function")
       root.shell.hide((root.manifest && root.manifest.id) || "omarchy.reminders")
   }
@@ -241,28 +256,36 @@ Item {
   PanelWindow {
     id: panel
     visible: root.opened && root.ready
-    onVisibleChanged: if (visible) whenField.forceActiveFocus()
+    onVisibleChanged: if (visible && !root.previewing) whenField.forceActiveFocus()
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     WlrLayershell.namespace: "omarchy-reminders"
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    WlrLayershell.layer: root.previewing ? WlrLayer.Top : WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: root.previewing ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
+    mask: root.previewing ? noInput : null
+
+    Region { id: noInput }
 
     // Floating style blurs a still of the screen taken as the overlay opens.
     // Hyprland's own blur is off in Omarchy, so the blur is drawn here.
-    ScreencopyView {
+    // Each open builds a new capture, so the window waits for a still taken before it showed.
+    Loader {
       id: backdrop
+      readonly property bool hasContent: !!item && item.hasContent
       anchors.fill: parent
-      visible: false
-      // A fresh source on each open takes a fresh still.
-      captureSource: root.blur && root.opened ? panel.screen : null
+      active: root.blur && root.opened
+
+      sourceComponent: ScreencopyView {
+        visible: false
+        captureSource: panel.screen
+      }
     }
 
     MultiEffect {
       anchors.fill: parent
       visible: root.blur && backdrop.hasContent
-      source: backdrop
+      source: backdrop.item
       autoPaddingEnabled: false
       blurEnabled: true
       blur: root.blurAmount

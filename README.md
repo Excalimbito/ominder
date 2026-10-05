@@ -96,6 +96,8 @@ Settings live on the Ominder entry in `~/.config/omarchy/shell.json` and can be 
 | `blur` | `0.67` | Floating style: blur behind the overlay, `0` (off) to `1` |
 | `dim` | `0` | Floating style: how much the overlay darkens the screen, `0` (none) to `1` |
 | `performanceMode` | `false` | Turn off the clock animation |
+| `showCount` | `true` | Show the number of upcoming reminders next to the bell |
+| `emptyBell` | `dimmed` | Bell with no reminders: `dimmed` or `hidden` |
 
 ## How it works
 

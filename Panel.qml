@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "TimeParser.js" as TimeParser
@@ -381,7 +381,7 @@ Panel {
               iconText: "󰉋"
               tooltipText: "Choose a sound file"
               foreground: root.barForeground
-              onClicked: soundDialog.open()
+              onClicked: if (!soundPicker.running) soundPicker.running = true
             }
           }
 
@@ -455,12 +455,18 @@ Panel {
     }
   }
 
-  FileDialog {
-    id: soundDialog
-    title: "Choose a reminder sound"
-    nameFilters: ["Sounds (*.oga *.ogg *.wav *.flac *.mp3)", "All files (*)"]
-    currentFolder: Util.fileUrl(soundFileField.text ? soundFileField.text.replace(/\/[^\/]*$/, "") : "/usr/share/sounds")
-    onAccepted: root.saveSetting("soundFile", decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, "")))
+  // The dialog runs in its own qml6 process: a GTK file dialog inside the shell can crash it.
+  Process {
+    id: soundPicker
+    command: ["qml6", Qt.resolvedUrl("bin/pick-sound.qml").toString().replace(/^file:\/\//, ""), "--",
+      soundFileField.text ? soundFileField.text.replace(/\/[^\/]*$/, "") : "/usr/share/sounds"]
+    environment: ({ QT_FORCE_STDERR_LOGGING: "1", QT_MESSAGE_PATTERN: "%{message}" })
+    stderr: StdioCollector {
+      onStreamFinished: {
+        var match = /^PATH (.+)$/m.exec(text)
+        if (match) root.saveSetting("soundFile", match[1])
+      }
+    }
   }
 
   // While a blur or dim slider moves, the overlay opens under the panel in preview mode,

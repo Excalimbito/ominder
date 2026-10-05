@@ -79,6 +79,12 @@ if (described !== "Thu · in 2h11m · daily") {
   console.log("FAIL describe without time:", described)
 }
 
+var passed = TimeParser.parse("2026-10-01 11:00", now)
+if (passed.error !== "That time has passed" || local(passed.at) !== "2026-10-01 11:00:00") {
+  failures++
+  console.log("FAIL passed date keeps at:", JSON.stringify(passed))
+}
+
 // [text, minutes, expected]; null means the time cannot be scrolled
 var shifts = [
   ["", 1, "12:20"],
@@ -110,5 +116,5 @@ shifts.forEach(function(c) {
   }
 })
 
-console.log(failures ? failures + " failed" : cases.length + shifts.length + 3 + " passed")
+console.log(failures ? failures + " failed" : cases.length + shifts.length + 4 + " passed")
 process.exit(failures ? 1 : 0)

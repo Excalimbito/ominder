@@ -95,7 +95,7 @@ Settings live on the Ominder entry in `~/.config/omarchy/shell.json` and can be 
 | `soundFile` | `/usr/share/sounds/freedesktop/stereo/window-attention.oga` | Played with `pw-play` |
 | `snoozeMinutes` | `5` | Snooze length |
 | `style` | `floating` | Create overlay style: `floating` (large scrollable clock, no card) or `classic` |
-| `blur` | `0.67` | Floating style: blur behind the overlay, `0` (off) to `1` |
+| `blur` | `0` | Floating style: blur behind the overlay, `0` (off) to `1` |
 | `dim` | `0` | Floating style: how much the overlay darkens the screen, `0` (none) to `1` |
 | `performanceMode` | `false` | Turn off the clock animation |
 | `showCount` | `true` | Show the number of upcoming reminders next to the bell |
@@ -120,7 +120,7 @@ omarchy plugin remove io.github.excalimbito.ominder
 node test.js     # time parser
 bash test.sh     # CLI, against temporary XDG directories
 omarchy plugin validate .
-/usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml ReminderFlow.qml
+qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml ReminderFlow.qml
 ```
 
 Changes to `ReminderFlow.qml` need `omarchy-restart-shell`, because the overlay stays loaded between summons.

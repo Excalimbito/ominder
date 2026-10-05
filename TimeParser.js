@@ -87,7 +87,8 @@ function parseOnce(input, now) {
 
   var date = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), time.hour, time.minute)
   if (date.getMonth() !== Number(iso[2]) - 1 || date.getDate() !== Number(iso[3])) return { error: "Invalid date" }
-  if (date <= now) return { error: "That time has passed" }
+  // `at` is kept so callers can show and scroll the time
+  if (date <= now) return { error: "That time has passed", at: Math.floor(date.getTime() / 1000) }
   return schedule(date)
 }
 
@@ -118,7 +119,7 @@ function parseRepeat(input, now) {
   return schedule(date, days.join() === "1,2,3,4,5" ? "weekdays" : names.join(", "), names.join(",") + " *-*-* " + clock)
 }
 
-// Returns { at, repeat, onCalendar, everySeconds } or { error }.
+// Returns { at, repeat, onCalendar, everySeconds }, or { error } (with `at` when a date has passed).
 // at is the first fire time in epoch seconds; onCalendar / everySeconds are set for repeats.
 function parse(text, now) {
   now = now || new Date()
@@ -145,8 +146,8 @@ function shift(text, minutes, now) {
   if (result.everySeconds) return null
 
   var clock = /(\d{1,2}):(\d{2})$/.exec(input)
-  // A date scrolled into the past still moves, so it can be scrolled back
-  if (clock && (!result.error || result.error === "That time has passed")) {
+  // A date scrolled into the past still has `at`, so it can be scrolled back
+  if (clock && result.at) {
     var total = ((Number(clock[1]) * 60 + Number(clock[2]) + minutes) % 1440 + 1440) % 1440
     return input.slice(0, clock.index) + pad(Math.floor(total / 60)) + ":" + pad(total % 60)
   }

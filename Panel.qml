@@ -22,11 +22,11 @@ Panel {
   property int cursor: -1
   property bool confirmReset: false
   property bool showSettings: false
+  property bool previewing: false
 
   readonly property string ominder: Qt.resolvedUrl("bin/ominder").toString().replace(/^file:\/\//, "")
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property int labelWidth: Style.space(92)
-  readonly property string defaultSoundFile: "/usr/share/sounds/freedesktop/stereo/window-attention.oga"
 
   function open() {
     root.confirmReset = false
@@ -65,23 +65,23 @@ Panel {
     if (entry) root.run(["rm", entry.id])
   }
 
-  function writeSettings(entry) {
+  // Saves `changes` over the current settings; reset passes null to drop every setting,
+  // so each one falls back to its default.
+  function saveSettings(changes) {
+    var entry = { id: root.moduleName }
+    if (changes) {
+      for (var k in root.settings) if (k !== "id") entry[k] = root.settings[k]
+      for (var c in changes) entry[c] = changes[c]
+    }
     root.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
       root.bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
   function saveSetting(key, value) {
-    var entry = { id: root.moduleName }
-    for (var k in root.settings) if (k !== "id") entry[k] = root.settings[k]
-    entry[key] = value
-    root.writeSettings(entry)
-  }
-
-  // Drops every setting from the entry, so each one falls back to its default.
-  function resetSettings() {
-    root.writeSettings({ id: root.moduleName })
-    soundFileField.text = root.defaultSoundFile
+    var changes = {}
+    changes[key] = value
+    root.saveSettings(changes)
   }
 
   // Scrolls the list just enough to show the cursor row.
@@ -127,7 +127,7 @@ Panel {
       onActivateRequested: if (!root.showSettings) root.edit(root.cursor)
       onDeleteRequested: if (!root.showSettings) root.remove(root.cursor)
       onTextKey: function(text) {
-        if (text === "n") root.summonOverlay({})
+        if (text === "n" && !root.showSettings) root.summonOverlay({})
         else if (text === "s") root.showSettings = true
       }
 
@@ -197,7 +197,7 @@ Panel {
               iconText: "󰑓"
               tooltipText: "Reset settings to defaults"
               foreground: root.barForeground
-              onClicked: root.resetSettings()
+              onClicked: root.saveSettings(null)
             }
 
             PanelActionButton {
@@ -362,12 +362,13 @@ Panel {
             width: settingsColumn.width
             spacing: Style.spacing.sm
 
+            // Empty means bin/ominder's default sound.
             TextField {
               id: soundFileField
               anchors.verticalCenter: parent.verticalCenter
               width: parent.width - browseButton.width - parent.spacing
-              text: root.setting("soundFile", root.defaultSoundFile)
-              placeholderText: "Sound file"
+              text: root.setting("soundFile", "")
+              placeholderText: "Default sound"
               foreground: root.barForeground
               font.family: root.fontFamily
               Keys.onEscapePressed: keyCatcher.forceActiveFocus()
@@ -384,100 +385,50 @@ Panel {
             }
           }
 
-          Row {
-            spacing: Style.spacing.md
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              width: root.labelWidth
-              textFormat: Text.PlainText
-              text: "Snooze"
-              color: root.barForeground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-            }
-
-            ButtonGroup {
-              options: [
-                { value: "5", label: "5m" },
-                { value: "10", label: "10m" },
-                { value: "15", label: "15m" },
-                { value: "30", label: "30m" }
-              ]
-              value: String(root.setting("snoozeMinutes", 5))
-              foreground: root.barForeground
-              fontFamily: root.fontFamily
-              focusable: false
-              onChanged: function(value) { root.saveSetting("snoozeMinutes", Number(value)) }
-            }
+          SettingChoice {
+            label: "Snooze"
+            key: "snoozeMinutes"
+            fallback: 5
+            options: [
+              { value: "5", label: "5m" },
+              { value: "10", label: "10m" },
+              { value: "15", label: "15m" },
+              { value: "30", label: "30m" }
+            ]
           }
 
           PanelSeparator { foreground: root.barForeground }
 
-          Row {
-            spacing: Style.spacing.md
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              width: root.labelWidth
-              textFormat: Text.PlainText
-              text: "Style"
-              color: root.barForeground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-            }
-
-            ButtonGroup {
-              options: [
-                { value: "floating", label: "Floating" },
-                { value: "classic", label: "Classic" }
-              ]
-              value: root.setting("style", "floating")
-              foreground: root.barForeground
-              fontFamily: root.fontFamily
-              focusable: false
-              onChanged: function(value) { root.saveSetting("style", value) }
-            }
+          SettingChoice {
+            label: "Style"
+            key: "style"
+            fallback: "floating"
+            options: [
+              { value: "floating", label: "Floating" },
+              { value: "classic", label: "Classic" }
+            ]
           }
 
           SettingSlider {
             id: blurSlider
             label: "Blur"
             key: "blur"
-            fallback: 0.67
           }
 
           SettingSlider {
             id: dimSlider
             label: "Dim"
             key: "dim"
-            fallback: 0
           }
 
-          Row {
-            spacing: Style.spacing.md
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              width: root.labelWidth
-              textFormat: Text.PlainText
-              text: "No reminders"
-              color: root.barForeground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-            }
-
-            ButtonGroup {
-              options: [
-                { value: "dimmed", label: "Dim bell" },
-                { value: "hidden", label: "Hide bell" }
-              ]
-              value: root.setting("emptyBell", "dimmed")
-              foreground: root.barForeground
-              fontFamily: root.fontFamily
-              focusable: false
-              onChanged: function(value) { root.saveSetting("emptyBell", value) }
-            }
+          SettingChoice {
+            label: "No reminders"
+            key: "emptyBell"
+            fallback: "dimmed"
+            options: [
+              { value: "dimmed", label: "Dim bell" },
+              { value: "hidden", label: "Hide bell" }
+            ]
           }
 
           Toggle {
@@ -492,7 +443,6 @@ Panel {
 
           Toggle {
             width: settingsColumn.width
-            visible: root.setting("style", "floating") !== "classic"
             label: "Performance mode"
             description: "Disable animations"
             checked: root.setting("performanceMode", false)
@@ -509,18 +459,12 @@ Panel {
     id: soundDialog
     title: "Choose a reminder sound"
     nameFilters: ["Sounds (*.oga *.ogg *.wav *.flac *.mp3)", "All files (*)"]
-    currentFolder: "file://" + soundFileField.text.replace(/\/[^\/]*$/, "")
-    onAccepted: {
-      var path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""))
-      soundFileField.text = path
-      root.saveSetting("soundFile", path)
-    }
+    currentFolder: Util.fileUrl(soundFileField.text ? soundFileField.text.replace(/\/[^\/]*$/, "") : "/usr/share/sounds")
+    onAccepted: root.saveSetting("soundFile", decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, "")))
   }
 
   // While a blur or dim slider moves, the overlay opens under the panel in preview mode,
   // showing a sample reminder at the sliders' values. It closes shortly after they stop.
-  property bool previewing: false
-
   function previewBackdrop() {
     if (!root.opened) return
     previewHold.restart()
@@ -547,15 +491,43 @@ Panel {
     }
   }
 
-  // A 0 to 1 floating-style setting, shown as a percentage and saved when the slider is released.
+  // A labelled choice saved under `key`, as a number when `fallback` is one.
+  component SettingChoice: Row {
+    id: choice
+    property string label
+    property string key
+    property var fallback
+    property var options: []
+
+    spacing: Style.spacing.md
+
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      width: root.labelWidth
+      textFormat: Text.PlainText
+      text: choice.label
+      color: root.barForeground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+    }
+
+    ButtonGroup {
+      options: choice.options
+      value: String(root.setting(choice.key, choice.fallback))
+      foreground: root.barForeground
+      fontFamily: root.fontFamily
+      focusable: false
+      onChanged: function(value) { root.saveSetting(choice.key, typeof choice.fallback === "number" ? Number(value) : value) }
+    }
+  }
+
+  // A 0 to 1 setting, shown as a percentage and saved when the slider is released.
   component SettingSlider: Row {
     property string label
     property string key
-    property real fallback
     readonly property real live: slider.liveValue
     readonly property bool dragging: slider.dragging
 
-    visible: root.setting("style", "floating") !== "classic"
     width: settingsColumn.width
     spacing: Style.spacing.md
 
@@ -575,7 +547,7 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       width: parent.width - sliderLabel.width - sliderValue.width - parent.spacing * 2
       bar: root.bar
-      value: root.setting(parent.key, parent.fallback)
+      value: root.setting(parent.key, 0)
       onMoved: root.previewBackdrop()
       onReleased: function(value) { root.saveSetting(parent.key, Math.round(value * 100) / 100) }
     }

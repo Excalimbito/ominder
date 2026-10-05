@@ -263,77 +263,97 @@ Panel {
             id: rowColumn
             width: listFlick.width
 
+            // Rows come soonest first, so Today's rows lead and each group starts
+            // where `today` changes. The header belongs to the group's first row.
             Repeater {
               id: rows
               model: root.reminders
-              CursorSurface {
+              Column {
                 id: row
                 required property var modelData
                 required property int index
+                readonly property bool startsGroup: index === 0 || modelData.today !== root.reminders[index - 1].today
                 width: rowColumn.width
-                implicitHeight: rowContent.implicitHeight + Style.spacing.md * 2
-                hasCursor: root.cursor === index
-                foreground: root.barForeground
+                spacing: Style.spacing.xs
 
-                MouseArea {
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  onContainsMouseChanged: if (containsMouse) root.cursor = row.index
-                  onClicked: root.edit(row.index)
+                PanelSeparator {
+                  visible: row.startsGroup && row.index > 0
+                  foreground: root.barForeground
                 }
 
-                Row {
-                  id: rowContent
-                  anchors.fill: parent
-                  anchors.margins: Style.spacing.md
-                  anchors.leftMargin: Style.spacing.rowPaddingX
-                  spacing: Style.spacing.sm
+                PanelSectionHeader {
+                  visible: row.startsGroup
+                  text: row.modelData.today ? "Today" : "Future"
+                  foreground: root.barForeground
+                  fontFamily: root.fontFamily
+                }
 
-                  Column {
-                    width: parent.width - editButton.width - deleteButton.width - parent.spacing * 2
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Style.spacing.xs
+                CursorSurface {
+                  width: rowColumn.width
+                  implicitHeight: rowContent.implicitHeight + Style.spacing.md * 2
+                  hasCursor: root.cursor === row.index
+                  foreground: root.barForeground
 
-                    Text {
-                      width: parent.width
-                      textFormat: Text.PlainText
-                      text: (row.modelData.repeat ? "󰑖 " : "") + row.modelData.message
-                      color: root.barForeground
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.body
-                      font.bold: true
-                      elide: Text.ElideRight
-                    }
-
-                    Text {
-                      width: parent.width
-                      textFormat: Text.PlainText
-                      text: TimeParser.describe(row.modelData, root.now)
-                      color: root.barForeground
-                      opacity: 0.7
-                      font.family: root.fontFamily
-                      font.pixelSize: Style.font.caption
-                      elide: Text.ElideRight
-                    }
-                  }
-
-                  PanelActionButton {
-                    id: editButton
-                    anchors.verticalCenter: parent.verticalCenter
-                    iconText: "󰏫"
-                    tooltipText: "Edit"
-                    foreground: root.barForeground
+                  MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onContainsMouseChanged: if (containsMouse) root.cursor = row.index
                     onClicked: root.edit(row.index)
                   }
 
-                  PanelActionButton {
-                    id: deleteButton
-                    anchors.verticalCenter: parent.verticalCenter
-                    iconText: "󰆴"
-                    tooltipText: "Delete (x)"
-                    foreground: root.barForeground
-                    hoverColor: Color.urgent
-                    onClicked: root.remove(row.index)
+                  Row {
+                    id: rowContent
+                    anchors.fill: parent
+                    anchors.margins: Style.spacing.md
+                    anchors.leftMargin: Style.spacing.rowPaddingX
+                    spacing: Style.spacing.sm
+
+                    Column {
+                      width: parent.width - editButton.width - deleteButton.width - parent.spacing * 2
+                      anchors.verticalCenter: parent.verticalCenter
+                      spacing: Style.spacing.xs
+
+                      Text {
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        text: (row.modelData.repeat ? "󰑖 " : "") + row.modelData.message
+                        color: root.barForeground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.body
+                        font.bold: true
+                        elide: Text.ElideRight
+                      }
+
+                      Text {
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        text: TimeParser.describe(row.modelData, root.now)
+                        color: root.barForeground
+                        opacity: 0.7
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                        elide: Text.ElideRight
+                      }
+                    }
+
+                    PanelActionButton {
+                      id: editButton
+                      anchors.verticalCenter: parent.verticalCenter
+                      iconText: "󰏫"
+                      tooltipText: "Edit"
+                      foreground: root.barForeground
+                      onClicked: root.edit(row.index)
+                    }
+
+                    PanelActionButton {
+                      id: deleteButton
+                      anchors.verticalCenter: parent.verticalCenter
+                      iconText: "󰆴"
+                      tooltipText: "Delete (x)"
+                      foreground: root.barForeground
+                      hoverColor: Color.urgent
+                      onClicked: root.remove(row.index)
+                    }
                   }
                 }
               }
@@ -439,6 +459,17 @@ Panel {
             foreground: root.barForeground
             fontFamily: root.fontFamily
             onClicked: root.saveSetting("showCount", !checked)
+          }
+
+          SettingChoice {
+            visible: root.setting("showCount", true)
+            label: "Count"
+            key: "countScope"
+            fallback: "all"
+            options: [
+              { value: "today", label: "Today" },
+              { value: "all", label: "All" }
+            ]
           }
 
           Toggle {

@@ -4,7 +4,9 @@ Reminders for [Omarchy](https://omarchy.org): flexible times, repeats, snooze, n
 
 > **Status:** early development. The plugin currently ships simple functionality and UI. See [`docs/SPEC.md`](docs/SPEC.md) for the planned behaviour so far.
 
-![Preview](./preview.png)
+![Ominder: create overlay, reminder list, and settings](./preview.jpg)
+
+![Classic overlay style and the v0.1.0 panel](./preview_classic.jpg)
 
 ## Install
 

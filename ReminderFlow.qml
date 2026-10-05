@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Effects
 import qs.Commons
 import qs.Ui
 import "TimeParser.js" as TimeParser
@@ -22,7 +23,10 @@ Item {
   property color foreground: Color.menu.text
   property color border: Color.menu.border
   property var borderSpec: Border.surfaceSpec("menu", "border", border, Math.max(1, Style.space(2)))
-  property color scrim: Color.menu.scrim
+  // Floating style dims the screen by the `dim` setting (0 to 1) in the theme's scrim colour.
+  property color scrim: root.floating
+    ? Qt.rgba(Color.menu.scrim.r, Color.menu.scrim.g, Color.menu.scrim.b, root.unit(root.settings.dim, 0))
+    : Color.menu.scrim
   readonly property int cornerRadius: Style.cornerRadius
   property int contentMargin: Style.spacing.panelPadding
   property int cardWidth: Math.min(Style.space(root.floating ? 480 : 380), panel.width - Style.gapsOut * 2)
@@ -37,6 +41,10 @@ Item {
   property var settings: ({})
   readonly property bool floating: root.settings.style !== "classic"
   readonly property bool animate: root.settings.performanceMode !== true
+  readonly property real blurAmount: root.unit(root.settings.blur, 0.67)
+  readonly property bool blur: root.floating && root.blurAmount > 0
+  // The window waits for the blurred still, so the still never contains the overlay itself.
+  readonly property bool ready: !root.blur || backdrop.hasContent || captureTimeout.triggeredOnce
 
   // Floating style: the drum shows the parsed time, the last valid one while the text is invalid,
   // and the current time while it is empty. +1 / -1 while a scroll step rolls the drum.
@@ -47,6 +55,11 @@ Item {
   readonly property bool drumLive: !root.parsed.error && !root.parsed.everySeconds
 
   onParsedChanged: if (!root.parsed.error) root.lastValid = new Date(root.parsed.at * 1000)
+
+  // A 0 to 1 setting, or `fallback` when it is missing or not a number.
+  function unit(value, fallback) {
+    return typeof value === "number" && isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback
+  }
 
   function readSettings(text) {
     var config = ({})
@@ -92,9 +105,9 @@ Item {
     root.lastValid = null
     whenField.text = payload.when || ""
     messageField.text = payload.message || ""
+    if (!root.opened) captureTimeout.triggeredOnce = false
     root.opened = true
-
-    Qt.callLater(function() { whenField.forceActiveFocus() })
+    if (panel.visible) whenField.forceActiveFocus()
   }
 
   function close() {
@@ -128,6 +141,15 @@ Item {
     if (messageField.text.trim()) args.push(messageField.text.trim())
     root.dismiss()
     Quickshell.execDetached(args)
+  }
+
+  // Opens without blur if the screen cannot be captured.
+  Timer {
+    id: captureTimeout
+    property bool triggeredOnce: false
+    interval: 250
+    running: root.opened && !root.ready
+    onTriggered: triggeredOnce = true
   }
 
   SystemClock {
@@ -218,13 +240,34 @@ Item {
 
   PanelWindow {
     id: panel
-    visible: root.opened
+    visible: root.opened && root.ready
+    onVisibleChanged: if (visible) whenField.forceActiveFocus()
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     WlrLayershell.namespace: "omarchy-reminders"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
+
+    // Floating style blurs a still of the screen taken as the overlay opens.
+    // Hyprland's own blur is off in Omarchy, so the blur is drawn here.
+    ScreencopyView {
+      id: backdrop
+      anchors.fill: parent
+      visible: false
+      // A fresh source on each open takes a fresh still.
+      captureSource: root.blur && root.opened ? panel.screen : null
+    }
+
+    MultiEffect {
+      anchors.fill: parent
+      visible: root.blur && backdrop.hasContent
+      source: backdrop
+      autoPaddingEnabled: false
+      blurEnabled: true
+      blur: root.blurAmount
+      blurMax: 64
+    }
 
     Rectangle {
       anchors.fill: parent

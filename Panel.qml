@@ -495,11 +495,11 @@ Panel {
                 id: countChoice
                 visible: root.setting("showCount", true)
                 leftPadding: countCard.borderLeft + Style.spacing.rowPaddingX
-                label: "Count"
+                label: "Count type"
                 key: "countScope"
                 fallback: "all"
                 options: [
-                  { value: "today", label: "Today" },
+                  { value: "today", label: "Today only" },
                   { value: "all", label: "All" }
                 ]
               }
